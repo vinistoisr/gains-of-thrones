@@ -227,8 +227,16 @@ async function sendBriefs(env, kind, force = false) {
 // are local minutes; WINDOW_MIN catches a late or skipped cron tick.
 const REFRESH_SLOTS = [6 * 60 + 20, 12 * 60 + 20, 18 * 60 + 20, 0 * 60 + 20];
 
+/** True while another refresh started under 10 minutes ago is still marked running. */
+async function refreshBusy(env) {
+  const st = await getJSON(env, "status.json");
+  return !!(st && st.running && Date.now() / 1000 - (st.startedAt || 0) < 600);
+}
+
 async function scheduledRefresh(env) {
   const { date, minutes } = localNow();
+  // a slot that finds a refresh running is left unmarked, so a later tick in its window takes it
+  if (await refreshBusy(env)) return null;
   for (const slot of REFRESH_SLOTS) {
     if (!(minutes >= slot && minutes < slot + WINDOW_MIN)) continue;
     const marker = `state/refresh-${date}-${String(slot).padStart(4, "0")}`;
@@ -236,12 +244,8 @@ async function scheduledRefresh(env) {
     await env.BUCKET.put(marker, "1");
     return runRefresh(env, { reason: `cron slot ${slot}` });
   }
-  if (await env.BUCKET.head("refresh.flag")) {
-    const st = await getJSON(env, "status.json");
-    if (!(st && st.running && Date.now() / 1000 - (st.startedAt || 0) < 600)) {
-      return runRefresh(env, { reason: "refresh.flag" });
-    }
-  }
+  // a requested refresh that never finished (the page closed mid-way, or it was cut off)
+  if (await env.BUCKET.head("refresh.flag")) return runRefresh(env, { reason: "refresh.flag" });
   return null;
 }
 
@@ -311,7 +315,7 @@ export default {
       }
       const r = await finishAuth(env, om[1], url);
       if (r.error) return back({ oauth_error: r.error });
-      ctx.waitUntil(runRefresh(env, { reason: `${om[1]} connected for ${r.person}` }));
+      // the settings page starts the first refresh when it sees ?connected
       return back({ connected: om[1], person: r.person });
     }
     if (url.pathname.startsWith("/api/")) {
@@ -364,13 +368,16 @@ export default {
       return json(brief || {});
     }
 
+    // The refresh runs inside this request rather than in waitUntil, which Cloudflare
+    // cuts off about 30 s after the response; a first refresh can take longer. The flag
+    // lets the next cron tick finish the job if the page is closed before this returns.
+    // The weekly AI note is left to the cron slots, which have more time.
     if (req.method === "POST" && url.pathname === "/refresh") {
-      const st = await getJSON(env, "status.json");
-      if (st && st.running && Date.now() / 1000 - (st.startedAt || 0) < 600) return json({ started: false, running: true });
+      if (await refreshBusy(env)) return json({ started: false, running: true });
       await env.BUCKET.put("refresh.flag", JSON.stringify({ at: Date.now() / 1000, by: who.email || null }),
         { httpMetadata: { contentType: "application/json" } });
-      ctx.waitUntil(runRefresh(env, { reason: `refresh by ${who.email || "signed-in user"}` }));
-      return json({ started: true, running: true });
+      const summary = await runRefresh(env, { reason: `refresh by ${who.email || "signed-in user"}`, narrative: "skip" });
+      return json({ started: true, running: false, ok: !!summary.ok });
     }
     // admin: full rebuild of ring.json from raw files, or force the weekly narrative
     if (req.method === "POST" && url.pathname === "/admin/rebuild") {

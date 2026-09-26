@@ -364,6 +364,9 @@ export function computeBrief(days, today, planStore = null, unit = "lb") {
   const week = slept.filter((n) => daysBetween(n.d, today) < 7);
   const short7 = week.filter((n) => n.slh < NEED_H).length;
   const needLbl = fmtHm(NEED_H);
+  // a night can have a score but no sleep period (no bedtime); null must not read as midnight
+  const bedRels = nights.slice(-28).map((n) => n.bedRel).filter((v) => v != null);
+  const wakeRels = nights.slice(-28).map((n) => n.wakeRel).filter((v) => v != null);
   const lastIsFresh = daysBetween(last.d, today) <= 1;
 
   out.sleep = {
@@ -374,8 +377,8 @@ export function computeBrief(days, today, planStore = null, unit = "lb") {
     bed: last.bed ?? null, wake: last.wake ?? null,
     base: Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v == null ? null : pyRound(v, 1)])),
     needH: NEED_H, shortNights14, nights14, hoursBelow14: pyRound(hoursBelow14, 1), short7, nights7: week.length,
-    bedSdMin: nights.length >= 5 ? Math.round(pstdev(nights.slice(-28).map((n) => n.bedRel)) * 60) : null,
-    wakeSdMin: nights.length >= 5 ? Math.round(pstdev(nights.slice(-28).map((n) => n.wakeRel)) * 60) : null,
+    bedSdMin: bedRels.length >= 5 ? Math.round(pstdev(bedRels) * 60) : null,
+    wakeSdMin: wakeRels.length >= 5 ? Math.round(pstdev(wakeRels) * 60) : null,
   };
 
   // tonight's bedtime target: expected wake for tomorrow's day type
@@ -383,7 +386,7 @@ export function computeBrief(days, today, planStore = null, unit = "lb") {
   const weekend = weekday(tomorrow) >= 5;
   const sameType = nights.slice(-56).filter((n) => (weekday(n.d) >= 5) === weekend);
   const wakeRef = sameType.length >= 4 ? sameType.slice(-14) : nights.slice(-14);
-  const wakeRel = median(wakeRef.map((n) => n.wakeRel));
+  const wakeRel = median(wakeRef.map((n) => n.wakeRel).filter((v) => v != null));
   const effs = nights.slice(-28).filter((n) => n.eff).map((n) => n.eff);
   const eff = effs.length ? median(effs) : 89;
   const tibNeeded = NEED_H / (eff / 100);

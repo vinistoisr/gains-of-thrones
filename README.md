@@ -120,7 +120,7 @@ The settings page holds up to eight people, each with their own tokens. Everyone
 - Tokens are stored in the bucket and never sent back to the browser. The settings page only shows whether each one is connected.
 - Your Liftoff password is not stored.
 - Each person picks kg or lb on the settings page, and every chart, record, tooltip, coach note and push text uses it. Hevy data is stored in kg as logged and converted only when a person picks lb. Liftoff loads are read as logged in the chosen unit; an exercise with its own unit override in Liftoff is converted. Hevy RPE becomes reps in reserve (10 minus RPE).
-- Removing a person deletes their tokens. Their stored data stays in the bucket until you delete it in the Cloudflare dashboard (R2, your dashboard's bucket, `data/<id>/`).
+- Removing a person on the settings page deletes their tokens and everything stored for them (daily data, workouts, weekly plan, coach snapshot and their devices' notification sign-ups).
 
 ## Optional
 

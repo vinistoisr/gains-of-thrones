@@ -28,8 +28,15 @@ import { todayLocal, localStamp, addDays, daysBetween, mondayOf, setTimeZone } f
 const LOOKBACK = 35;
 const PLAN_KEEP = 26;   // weeks kept in state/plan.json
 
-// the first person with a workout log owns state/plan.json; any further one gets state/plan-<uid>.json
-export const planKey = (people, uid) => (people.find((x) => x.workouts) || {}).id === uid ? "state/plan.json" : `state/plan-${uid}.json`;
+// each person's weekly plan record; state/plan.json is the older single-lifter file,
+// adopted by the first person with a workout log the first time theirs is missing
+export const planKey = (uid) => `state/plan-${uid}.json`;
+async function loadPlan(env, people, uid) {
+  const own = await getJSON(env, planKey(uid));
+  if (own) return own;
+  if ((people.find((x) => x.workouts) || {}).id !== uid) return null;
+  return getJSON(env, "state/plan.json");
+}
 
 /**
  * The weekly plan store for one user. On the first refresh of a new ISO week
@@ -39,8 +46,8 @@ export const planKey = (people, uid) => (people.find((x) => x.workouts) || {}).i
  */
 async function briefWithPlan(env, u, days, today, people) {
   if (!u.workouts) return computeBrief(days, today, null, u.units);
-  const key = planKey(people, u.id);
-  const store = (await getJSON(env, key)) || { weeks: [] };
+  const key = planKey(u.id);
+  const store = (await loadPlan(env, people, u.id)) || { weeks: [] };
   if (!Array.isArray(store.weeks)) store.weeks = [];
   const weekStart = mondayOf(today);
   let changed = false;
@@ -147,6 +154,7 @@ async function refreshUser(env, u, secrets, today, full, log) {
       const r = await liftoffPosts(refreshToken, state, (env.LIFTOFF_API_BASE || LIFTOFF_DEFAULT_BASE).replace(/\/$/, ""));
       posts = r.posts;
       await putJSON(env, `data/${uid}/workouts.json`, posts);
+      await putJSON(env, `data/${uid}/workouts-src.json`, { src: "liftoff" });
       if (r.state !== state) await putJSON(env, `data/${uid}/liftoff-auth.json`, r.state);
       out.workouts = posts.length;
     } catch (e) {
@@ -159,6 +167,7 @@ async function refreshUser(env, u, secrets, today, full, log) {
       await putJSON(env, `data/${uid}/hevy.json`, next);
       posts = hevyToPosts(next.workouts);
       await putJSON(env, `data/${uid}/workouts.json`, posts);
+      await putJSON(env, `data/${uid}/workouts-src.json`, { src: "hevy" });
       out.workouts = posts.length;
     } catch (e) {
       out.warnings.push(`hevy: ${e.message}`);
@@ -166,7 +175,13 @@ async function refreshUser(env, u, secrets, today, full, log) {
   } else if (u.workouts) {
     out.warnings.push(`No ${u.workouts === "hevy" ? "Hevy API key" : "Liftoff sign-in"} yet.`);
   }
-  if (posts === null) posts = (await getJSON(env, `data/${uid}/workouts.json`)) || [];
+  // fall back to the stored log only if it came from the log this person uses now
+  // (a file from before workouts-src.json existed is a Liftoff log)
+  if (posts === null && u.workouts) {
+    const src = ((await getJSON(env, `data/${uid}/workouts-src.json`)) || {}).src || "liftoff";
+    posts = src === u.workouts ? (await getJSON(env, `data/${uid}/workouts.json`)) || [] : [];
+  }
+  if (posts === null) posts = [];
 
   const screentime = (await getJSON(env, `data/${uid}/screentime.json`)) || {};
   // every load in the person's unit (Hevy posts are kg, Liftoff as logged; sources.js postsInUnit)
@@ -190,13 +205,13 @@ async function refreshUltrahuman(env, uid, secrets, today, full, out, log) {
       if (empty[d] && daysBetween(d, today) > 3) continue;          // gave up on that date
       wanted.push(d);
     }
-    for (const d of wanted) {
+    const one = async (d) => {
       try {
         const raw = await fetchUltrahumanDay(d, token);
         const metrics = (raw.data && raw.data.metrics) || {};
-        if (!hasRealData(metrics)) { empty[d] = Date.now(); continue; }
+        if (!hasRealData(metrics)) { empty[d] = Date.now(); return; }
         const rec = ringRec(raw);
-        if (!rec) { empty[d] = Date.now(); continue; }
+        if (!rec) { empty[d] = Date.now(); return; }
         await env.BUCKET.put(`data/${uid}/${d}.json`, JSON.stringify(raw), { httpMetadata: { contentType: "application/json" } });
         ring[rec.d] = rec;
         delete empty[rec.d];
@@ -204,7 +219,9 @@ async function refreshUltrahuman(env, uid, secrets, today, full, out, log) {
       } catch (e) {
         out.warnings.push(`ultrahuman ${d}: ${e.message}`);
       }
-    }
+    };
+    // five days at a time: a first refresh asks for 35 days, one at a time was the slow part
+    for (let i = 0; i < wanted.length; i += 5) await Promise.all(wanted.slice(i, i + 5).map(one));
     await putJSON(env, `data/${uid}/ring.json`, ring);
     await putJSON(env, `data/${uid}/empty.json`, empty);
   } else {
@@ -221,6 +238,9 @@ export async function runRefresh(env, opts = {}) {
   const t0 = Date.now();
   const settings = await loadSettings(env);
   setTimeZone(settings.tz);
+  // a time zone change asks for every summary to be rebuilt from the raw days
+  const rebuild = !opts.full && await env.BUCKET.head("state/rebuild.flag");
+  if (rebuild) opts = { ...opts, full: true };
   const today = todayLocal();
   const users = settings.people;
   const logLines = [];
@@ -280,6 +300,7 @@ export async function runRefresh(env, opts = {}) {
   } finally {
     await setStatus(env, { running: false, last: Date.now() / 1000, ok: summary.ok, ms: Date.now() - t0 });
     await env.BUCKET.delete("refresh.flag");
+    if (summary.ok && opts.full) await env.BUCKET.delete("state/rebuild.flag");
   }
   summary.ms = Date.now() - t0;
   summary.log = logLines;

@@ -30,7 +30,7 @@ export const PROVIDERS = {
     tokenUrl: "https://api.ouraring.com/oauth/token",
     // daily summaries (sleep, readiness, activity), heart rate, SpO2; the sleep
     // periods and VO2 max come under "daily". Oura allows 10 users per app until approved.
-    scopes: ["daily", "heartrate", "spo2"],
+    scopes: ["daily", "heartrate", "spo2", "heart_health"],
     authParams: {},
     appHelp: "https://cloud.ouraring.com/oauth/applications",
   },
@@ -146,6 +146,14 @@ export async function finishAuth(env, provider, url) {
   return { person: st.person, provider };
 }
 
+/** Write one token record into the stored secrets, keeping anything saved meanwhile. */
+async function persistToken(env, secrets, uid, provider, rec) {
+  const fresh = await loadSecrets(env);
+  fresh[uid] = { ...(fresh[uid] || {}), [provider]: rec };
+  await saveSecrets(env, fresh);
+  secrets[uid] = { ...(secrets[uid] || {}), [provider]: rec };
+}
+
 /**
  * A valid access token for one person, refreshing (and persisting a rotated
  * refresh token) when needed. Throws ReconnectError when the grant is gone;
@@ -172,17 +180,19 @@ export async function accessToken(env, secrets, uid, provider) {
       if (now.access && now.expiresAt - EARLY_MS > Date.now()) return now.access;
       return accessToken(env, secrets, uid, provider);
     }
-    fresh[uid] = { ...(fresh[uid] || {}), [provider]: { ...rec, needsReconnect: true } };
-    secrets[uid] = fresh[uid];
-    await saveSecrets(env, fresh);
+    await persistToken(env, secrets, uid, provider, { ...rec, needsReconnect: true });
     throw e;
   }
-  await saveSecrets(env, secrets);
+  await persistToken(env, secrets, uid, provider, secrets[uid][provider]);
   return secrets[uid][provider].access;
 }
 
-/** GET (or POST with a JSON body) with a bearer token; one refresh-and-retry on 401. */
-export async function authedGet(env, secrets, uid, provider, url, body) {
+/**
+ * GET (or POST with a JSON body) with a bearer token; one refresh-and-retry on 401.
+ * optional: a data type the person may not have granted or own a sensor for; a
+ * 401/403 on it is a plain error the caller skips, never a Reconnect.
+ */
+export async function authedGet(env, secrets, uid, provider, url, body, { optional = false } = {}) {
   const send = (token) => fetch(url, body === undefined
     ? { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
     : { method: "POST", headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -195,9 +205,9 @@ export async function authedGet(env, secrets, uid, provider, url, body) {
   }
   if (r.status === 401 || r.status === 403) {
     const body = (await r.text()).slice(0, 160);
+    if (optional) throw new Error(`${PROVIDERS[provider].label} ${r.status} on an optional data type`);
     if (r.status === 401) {
-      secrets[uid][provider] = { ...secrets[uid][provider], needsReconnect: true };
-      await saveSecrets(env, secrets);
+      await persistToken(env, secrets, uid, provider, { ...secrets[uid][provider], needsReconnect: true });
       throw new ReconnectError(provider, "401");
     }
     throw new Error(`${PROVIDERS[provider].label} refused the request (403): ${body}`);

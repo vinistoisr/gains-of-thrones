@@ -41,7 +41,7 @@ test("oauth: start stores a one-time state and sends the person to Oura with the
   assert.equal(u.origin + u.pathname, PROVIDERS.oura.authUrl);
   assert.equal(u.searchParams.get("client_id"), "cid");
   assert.equal(u.searchParams.get("redirect_uri"), `${ORIGIN}/oauth/oura/callback`);
-  assert.equal(u.searchParams.get("scope"), "daily heartrate spo2");
+  assert.equal(u.searchParams.get("scope"), "daily heartrate spo2 heart_health");
   const state = u.searchParams.get("state");
   assert.ok(objects[`state/oauth/${state}.json`]);
 });

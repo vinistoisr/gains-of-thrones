@@ -8,6 +8,7 @@ import { todayLocal, mondayOf } from "../src/pipeline/util.js";
 // the workouts come from the bucket, nothing is fetched, no Workers AI
 const bucket = (objects) => ({
   get: async (key) => (key in objects ? { body: objects[key], json: async () => JSON.parse(objects[key]) } : null),
+  head: async (key) => (key in objects ? {} : null),
   put: async (key, body) => { objects[key] = String(body); },
   delete: async (key) => { delete objects[key]; },
   list: async () => ({ objects: [], truncated: false }),
@@ -26,7 +27,8 @@ test("runRefresh: the first refresh of a new week scores the stored weeks from t
   const env = { BUCKET: bucket(objects), USERS: JSON.stringify([{ id: "alex", name: "Alex", workouts: "liftoff" }]) };
   const summary = await runRefresh(env, { reason: "test", narrative: "skip" });
   assert.equal(summary.ok, true, summary.error);
-  const store = JSON.parse(objects["state/plan.json"]);
+  // the older single-lifter file is adopted into the person's own plan file
+  const store = JSON.parse(objects["state/plan-alex.json"]);
   assert.equal(store.weeks.length, 3);
   assert.deepEqual(store.weeks.slice(0, 2).map((w) => [w.group, w.achieved, w.result]), [["calves", 0, "miss"], ["quads", 4, "hit"]]);
   const cur = store.weeks[2];
@@ -38,7 +40,7 @@ test("runRefresh: the first refresh of a new week scores the stored weeks from t
   assert.equal(brief.training.plan.weekStart, cur.weekStart);
   assert.ok(objects["dashboard.html"].includes("Past calls"));
   // a second refresh in the same week leaves the store as it is
-  const before = objects["state/plan.json"];
+  const before = objects["state/plan-alex.json"];
   await runRefresh(env, { reason: "test", narrative: "skip" });
-  assert.equal(objects["state/plan.json"], before);
+  assert.equal(objects["state/plan-alex.json"], before);
 });

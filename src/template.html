@@ -1396,7 +1396,12 @@ function gspark(vals, w, h, color){
 function renderHero(){
   const hero = document.getElementById("hero");
   const d = [...DAYS].reverse().find(NIGHT);
-  if (!d){ hero.hidden = true; renderSleepCard(); renderRecov(); renderStages(); return; }
+  if (!d){
+    // no night yet (a workout log only, or a first sync without sleep): still offer Refresh
+    FRESH_THROUGH = DAYS.length ? DAYS[DAYS.length - 1].lbl : "-";
+    renderFresh(); wireRefresh();
+    hero.hidden = true; renderSleepCard(); renderRecov(); renderStages(); return;
+  }
   hero.hidden = false;
   FRESH_THROUGH = d.lbl;
   renderFresh();

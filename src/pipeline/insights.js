@@ -78,7 +78,7 @@ export function buildInsights(days, today, unit = "lb") {
     if (spikes.length) {
       const s = spikes.reduce((a, b) => (b.rhr > a.rhr ? b : a));
       out.push(["Recovery", `${lblLong(s.d)} stood out`,
-        `Resting HR was ${s.rhr} bpm against a usual ${fmtF(mu, 0)}, HRV ${s.hrv} ms, recovery ${s.rec}. This pattern usually follows alcohol, a late heavy meal, illness or stress. Check what that day held.`]);
+        `Resting HR was ${s.rhr} bpm against a usual ${fmtF(mu, 0)}${s.hrv != null ? `, HRV ${s.hrv} ms` : ""}${s.rec != null ? `, recovery ${s.rec}` : ""}. This pattern usually follows alcohol, a late heavy meal, illness or stress. Check what that day held.`]);
     }
   }
 

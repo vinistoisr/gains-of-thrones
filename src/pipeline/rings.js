@@ -30,13 +30,13 @@ export const OURA_BASE = "https://api.ouraring.com/v2/usercollection";
 const OURA_COLLECTIONS = { sleep: "sleep", dailySleep: "daily_sleep", readiness: "daily_readiness", activity: "daily_activity", spo2: "daily_spo2", vo2: "vO2_max" };
 const OURA_PHASE = { 1: "de", 2: "li", 3: "re", 4: "aw" };
 
-async function ouraList(env, secrets, uid, collection, start, end) {
+async function ouraList(env, secrets, uid, collection, start, end, optional = false) {
   const out = [];
   let next = null;
   for (let page = 0; page < 20; page++) {
     const q = new URLSearchParams({ start_date: start, end_date: end });
     if (next) q.set("next_token", next);
-    const j = await authedGet(env, secrets, uid, "oura", `${OURA_BASE}/${collection}?${q}`);
+    const j = await authedGet(env, secrets, uid, "oura", `${OURA_BASE}/${collection}?${q}`, undefined, { optional });
     out.push(...(j.data || []));
     next = j.next_token;
     if (!next) break;
@@ -60,7 +60,7 @@ export const oura = {
     const bucket = (d) => (days[d] ||= { sleep: [] });
     for (const [key, coll] of Object.entries(OURA_COLLECTIONS)) {
       let rows;
-      try { rows = await ouraList(env, secrets, uid, coll, s, e); }
+      try { rows = await ouraList(env, secrets, uid, coll, s, e, key === "vo2" || key === "spo2"); }
       catch (err) {
         // VO2 max and SpO2 need newer rings; a 403/404 on those must not sink the rest
         if ((key === "vo2" || key === "spo2") && !(err instanceof ReconnectError)) continue;
@@ -131,13 +131,13 @@ const ymd = (o) => (o && o.year ? `${o.year}-${String(o.month).padStart(2, "0")}
 const civilDate = ([y, m, d]) => ({ year: y, month: m, day: d });
 const parts = (iso) => iso.split("-").map(Number);
 
-async function googleList(env, secrets, uid, type, filter) {
+async function googleList(env, secrets, uid, type, filter, optional = false) {
   const out = [];
   let token = "";
   for (let page = 0; page < 20; page++) {
     const q = new URLSearchParams({ filter, pageSize: "1000" });
     if (token) q.set("pageToken", token);
-    const j = await authedGet(env, secrets, uid, "google", `${GOOGLE_BASE}/${type}/dataPoints?${q}`);
+    const j = await authedGet(env, secrets, uid, "google", `${GOOGLE_BASE}/${type}/dataPoints?${q}`, undefined, { optional });
     out.push(...(j.dataPoints || []));
     token = j.nextPageToken;
     if (!token) break;
@@ -168,7 +168,7 @@ export const google = {
     }
     for (const [key, [type, filterName, field]] of Object.entries(G_DAILY)) {
       let rows;
-      try { rows = await googleList(env, secrets, uid, type, `${filterName}.date >= "${start}" AND ${filterName}.date < "${endX}"`); }
+      try { rows = await googleList(env, secrets, uid, type, `${filterName}.date >= "${start}" AND ${filterName}.date < "${endX}"`, true); }
       catch (err) {
         if (err instanceof ReconnectError) throw err;
         continue;                                       // a device without that sensor

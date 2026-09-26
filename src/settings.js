@@ -112,11 +112,32 @@ async function savePerson(env, b, origin) {
   return json({ ok: true, id, ...(await state(env, origin)) });
 }
 
+/** Every stored object of one person: data, coach snapshot, plan and push subscriptions. */
+async function deletePersonData(env, id) {
+  const del = async (prefix, keep = () => true) => {
+    let cursor;
+    do {
+      const page = await env.BUCKET.list({ prefix, cursor });
+      const keys = [];
+      for (const o of page.objects) if (await keep(o.key)) keys.push(o.key);
+      if (keys.length) await env.BUCKET.delete(keys);
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+  };
+  await del(`data/${id}/`);
+  await env.BUCKET.delete([`coach/${id}.md`, `state/plan-${id}.json`]);
+  await del("push/subs/", async (key) => {
+    const o = await env.BUCKET.get(key);
+    try { return o && (await o.json()).user === id; } catch { return false; }
+  });
+}
+
 async function removePerson(env, id, origin) {
   const settings = await loadSettings(env);
   if (!settings.people.some((p) => p.id === id)) return json({ error: "No such person." }, 404);
   await saveSettings(env, { ...settings, people: settings.people.filter((p) => p.id !== id) });
   await dropSecrets(env, id);
+  await deletePersonData(env, id);
   return json({ ok: true, ...(await state(env, origin)) });
 }
 
@@ -152,6 +173,8 @@ export async function settingsApi(req, env, url) {
       const contact = b.contact != null ? String(b.contact).trim().slice(0, 120) : settings.contact;
       if (contact && !/^[^@\s]+@[^@\s]+$/.test(contact)) return json({ error: "Enter an email address or leave it blank.", field: "contact" }, 400);
       await saveSettings(env, { ...settings, tz, contact });
+      // bedtimes in the stored summaries were computed in the old zone: rebuild them all
+      if (tz !== settings.tz && settings.people.length) await env.BUCKET.put("state/rebuild.flag", tz);
       return json({ ok: true, ...(await state(env, url.origin)) });
     }
   }

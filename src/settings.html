@@ -254,7 +254,7 @@ function openForm(slot, person) {
     if (person.has.liftoff) f.elements.liftoffEmail.placeholder = "Signed in. Leave blank to keep it.";
     const rm = $('[data-act="remove"]', f); rm.hidden = false;
     rm.addEventListener("click", async () => {
-      if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Click again to remove"; return; }
+      if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Click again: removes their data too"; return; }
       const r = await api("/api/people/" + person.id, { method: "DELETE" });
       if (!r.ok) { msg.className = "msg err"; msg.textContent = r.error; return; }
       S = r.data; renderAll();
@@ -378,7 +378,7 @@ function renderAll() { renderPeople(); renderApps(); renderStatus(); renderGener
 (() => {
   const q = new URLSearchParams(location.search);
   const b = $("#banner");
-  if (q.get("connected")) { b.hidden = false; b.className = "banner ok"; b.textContent = "Connected. The first refresh is running; the dashboard updates in a minute or two."; }
+  if (q.get("connected")) { b.hidden = false; b.className = "banner ok"; b.textContent = "Connected. Fetching the data now; this can take a minute."; window.__refreshAfterLoad = true; }
   else if (q.get("oauth_error")) { b.hidden = false; b.className = "banner err"; b.textContent = q.get("oauth_error"); }
   if (q.toString()) history.replaceState(null, "", "/settings");
 })();
@@ -418,6 +418,7 @@ api("/api/settings").then(r => {
     api("/api/settings", { method: "POST", body: JSON.stringify({ tz: $("#tz").value }) }).then(x => { if (x.ok) S = x.data; });
   }
   if (!S.people.length) $("#addbtn").click();
+  if (window.__refreshAfterLoad) startRefresh("Fetching the data...");
 });
 </script>
 </body>
