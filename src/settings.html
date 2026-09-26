@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Health settings</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-192.png">
+<style>
+@font-face{font-family:"Sora";src:url(/Sora.woff2) format("woff2");font-weight:100 800;font-display:swap}
+@font-face{font-family:"DM Sans";src:url(/DMSans.woff2) format("woff2");font-weight:100 1000;font-display:swap}
+:root{
+  --page:#0c0d0f; --surface:#16171a; --card2:#1e2023; --ink:#f3f3f1; --ink2:#c9cbd0; --muted:#9a9ca3;
+  --border:#26282d; --axis:#383b42; --accent:#d4f56a; --accent-ink:#0c0d0f; --good:#b5e86a; --warn:#f5b83d; --crit:#ff6b6b;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --page:#f4f4f1; --surface:#ffffff; --card2:#f0f0ec; --ink:#16171a; --ink2:#3a3c42; --muted:#6b6d74;
+    --border:#e2e2dd; --axis:#c9cac4; --accent:#4d7c0f; --accent-ink:#ffffff; --good:#3f7d0c; --warn:#a15c00; --crit:#c62828;
+    color-scheme:light;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.5 "DM Sans",system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+h1,h2{font-family:"Sora",system-ui,sans-serif;margin:0;letter-spacing:-.01em}
+h1{font-size:24px}
+h2{font-size:17px;margin-bottom:4px}
+header a{margin-left:auto}
+a{color:var(--ink)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:16px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.btn{min-height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--ink);
+  font:600 13px "DM Sans",system-ui,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn:hover{border-color:var(--axis)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--crit)}
+.btn[disabled]{opacity:.6;cursor:wait}
+.person{border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;background:var(--card2)}
+.prow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pname{font-weight:700;font-size:16px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12px;padding:2px 10px;border-radius:999px;border:1px solid var(--border);color:var(--ink2)}
+.chip.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.chip.no{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.prow .btn{margin-left:auto}
+form{display:grid;gap:12px;margin-top:14px}
+label{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--ink2)}
+label small{font-weight:400;color:var(--muted)}
+input,select{width:100%;height:42px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--page);color:var(--ink);font:15px "DM Sans",system-ui,sans-serif}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+@media (max-width:560px){.two{grid-template-columns:1fr}}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.msg{font-size:13px;min-height:1em}
+.msg.err{color:var(--crit)}
+.msg.ok{color:var(--good)}
+.warns{margin:8px 0 0;padding-left:18px;color:var(--warn);font-size:13px}
+.empty{color:var(--muted);font-size:14px;margin:0 0 12px}
+details{margin-top:6px}
+summary{cursor:pointer;color:var(--muted);font-size:13px}
+details p{font-size:13px;color:var(--ink2);margin:6px 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Settings</h1>
+  <a class="btn" href="/">Dashboard</a>
+</header>
+
+<section class="card" id="peoplecard">
+  <h2>People</h2>
+  <p class="sub">Each person needs an Ultrahuman token. A workout log is optional.</p>
+  <div id="people"></div>
+  <button class="btn primary" id="addbtn" type="button">Add a person</button>
+  <div id="newform"></div>
+</section>
+
+<section class="card">
+  <h2>Refresh</h2>
+  <p class="sub">Data is fetched every 6 hours. After adding a person, refresh once to build the dashboard.</p>
+  <div class="actions"><button class="btn" id="refreshbtn" type="button">Refresh now</button><span class="msg" id="refreshmsg"></span></div>
+  <div id="laststatus"></div>
+</section>
+
+<section class="card">
+  <h2>Time zone and push</h2>
+  <p class="sub">Dates, bedtimes and the 07:00 push use this time zone.</p>
+  <form id="generalform">
+    <div class="two">
+      <label>Time zone<select name="tz" id="tz"></select></label>
+      <label>Contact email (optional)<input name="contact" id="contact" type="email" autocomplete="email"><small>Push services may use it to reach whoever runs this site.</small></label>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">Save</button><span class="msg" id="generalmsg"></span></div>
+  </form>
+</section>
+
+<section class="card" id="signout" hidden>
+  <div class="actions"><a class="btn" href="/logout">Sign out</a></div>
+</section>
+</div>
+
+<template id="formtpl">
+  <form class="pform">
+    <label>Name<input name="name" required maxlength="40" autocomplete="off"></label>
+    <label>Ultrahuman API token <small data-hint="ultrahuman">Generate it in the Ultrahuman developer portal (vision.ultrahuman.com).</small>
+      <input name="ultrahuman" type="password" autocomplete="off" spellcheck="false"></label>
+    <label>Workout log
+      <select name="workouts"><option value="">None</option><option value="liftoff">Liftoff</option><option value="hevy">Hevy</option></select></label>
+    <div class="two" data-for="liftoff" hidden>
+      <label>Liftoff email or username<input name="liftoffEmail" autocomplete="off"></label>
+      <label>Liftoff password <small>used once to sign in; only the sign-in token is kept</small><input name="liftoffPassword" type="password" autocomplete="off"></label>
+    </div>
+    <label data-for="hevy" hidden>Hevy API key <small data-hint="hevy">Needs Hevy Pro. Create one at <a href="https://hevy.com/settings?developer" target="_blank" rel="noopener">hevy.com/settings?developer</a>.</small>
+      <input name="hevy" type="password" autocomplete="off" spellcheck="false"></label>
+    <div class="actions">
+      <button class="btn primary" type="submit">Save</button>
+      <button class="btn" type="button" data-act="cancel">Cancel</button>
+      <button class="btn danger" type="button" data-act="remove" hidden>Remove person</button>
+      <span class="msg"></span>
+    </div>
+  </form>
+</template>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+let S = null;
+
+async function api(path, opts = {}) {
+  let res;
+  try { res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json" } }); }
+  catch { return { ok: false, error: "Network error." }; }
+  if (res.redirected || res.status === 401) { location.href = "/login?next=/settings"; return { ok: false, error: "Signed out." }; }
+  let data = {};
+  try { data = await res.json(); } catch { return { ok: false, error: "Server error " + res.status }; }
+  return res.ok ? { ok: true, data } : { ok: false, error: data.error || "Error " + res.status, field: data.field };
+}
+
+function chip(text, cls) { const c = document.createElement("span"); c.className = "chip " + (cls || ""); c.textContent = text; return c; }
+
+function renderPeople() {
+  const box = $("#people");
+  box.textContent = "";
+  if (!S.people.length) {
+    const p = document.createElement("p"); p.className = "empty"; p.textContent = "Nobody yet. Add yourself to start."; box.appendChild(p);
+  }
+  for (const p of S.people) {
+    const el = document.createElement("div"); el.className = "person";
+    const row = document.createElement("div"); row.className = "prow";
+    const n = document.createElement("span"); n.className = "pname"; n.textContent = p.name; row.appendChild(n);
+    const chips = document.createElement("span"); chips.className = "chips";
+    chips.appendChild(p.has.ultrahuman ? chip("Ultrahuman connected", "ok") : chip("No Ultrahuman token", "no"));
+    if (p.workouts) {
+      const label = p.workouts === "hevy" ? "Hevy" : "Liftoff";
+      chips.appendChild(p.has[p.workouts] ? chip(label + " connected", "ok") : chip(label + " not connected", "no"));
+    }
+    row.appendChild(chips);
+    const edit = document.createElement("button"); edit.className = "btn"; edit.type = "button"; edit.textContent = "Edit";
+    row.appendChild(edit);
+    el.appendChild(row);
+    const warns = S.lastRefresh && S.lastRefresh.users && S.lastRefresh.users[p.id] && S.lastRefresh.users[p.id].warnings;
+    if (warns && warns.length) {
+      const ul = document.createElement("ul"); ul.className = "warns";
+      for (const w of warns.slice(0, 4)) { const li = document.createElement("li"); li.textContent = w; ul.appendChild(li); }
+      el.appendChild(ul);
+    }
+    const slot = document.createElement("div"); el.appendChild(slot);
+    edit.addEventListener("click", () => { if (!slot.firstChild) openForm(slot, p); });
+    box.appendChild(el);
+  }
+  $("#addbtn").hidden = S.people.length >= 8;
+}
+
+function openForm(slot, person) {
+  const f = $("#formtpl").content.firstElementChild.cloneNode(true);
+  const msg = $(".msg", f);
+  const sel = f.elements.workouts;
+  const sync = () => f.querySelectorAll("[data-for]").forEach(el => { el.hidden = el.dataset.for !== sel.value; });
+  sel.addEventListener("change", sync);
+  if (person) {
+    f.elements.name.value = person.name;
+    sel.value = person.workouts || "";
+    if (person.has.ultrahuman) f.elements.ultrahuman.placeholder = "Saved. Leave blank to keep it.";
+    if (person.has.hevy) f.elements.hevy.placeholder = "Saved. Leave blank to keep it.";
+    if (person.has.liftoff) f.elements.liftoffEmail.placeholder = "Signed in. Leave blank to keep it.";
+    const rm = $('[data-act="remove"]', f); rm.hidden = false;
+    rm.addEventListener("click", async () => {
+      if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Click again to remove"; return; }
+      const r = await api("/api/people/" + person.id, { method: "DELETE" });
+      if (!r.ok) { msg.className = "msg err"; msg.textContent = r.error; return; }
+      S = r.data; renderAll();
+    });
+  }
+  sync();
+  $('[data-act="cancel"]', f).addEventListener("click", () => { slot.textContent = ""; });
+  f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $('button[type="submit"]', f);
+    btn.disabled = true; msg.className = "msg"; msg.textContent = "Checking with each service...";
+    const b = {
+      id: person ? person.id : undefined,
+      name: f.elements.name.value, workouts: sel.value || null,
+      ultrahuman: f.elements.ultrahuman.value, hevy: f.elements.hevy.value,
+      liftoffEmail: f.elements.liftoffEmail.value, liftoffPassword: f.elements.liftoffPassword.value,
+    };
+    const r = await api("/api/people", { method: "POST", body: JSON.stringify(b) });
+    btn.disabled = false;
+    if (!r.ok) { msg.className = "msg err"; msg.textContent = r.error; return; }
+    S = r.data; renderAll();
+    const fresh = !person;
+    if (fresh) startRefresh("Saved. Building the dashboard...");
+  });
+  slot.appendChild(f);
+  f.elements.name.focus();
+}
+
+function renderStatus() {
+  const box = $("#laststatus"); box.textContent = "";
+  const lr = S.lastRefresh;
+  const p = document.createElement("p"); p.className = "sub"; p.style.marginTop = "10px";
+  if (!lr || !lr.at) p.textContent = "No refresh has run yet.";
+  else {
+    const when = new Date(lr.at * 1000).toLocaleString();
+    p.textContent = lr.ok ? "Last refresh: " + when + "." : "Last refresh failed (" + when + "): " + lr.error;
+    if (!lr.ok) p.style.color = "var(--crit)";
+  }
+  box.appendChild(p);
+}
+
+function renderGeneral() {
+  const sel = $("#tz");
+  if (!sel.options.length) {
+    let zones = [];
+    try { zones = Intl.supportedValuesOf("timeZone"); } catch { zones = [S.tz]; }
+    if (!zones.includes("UTC")) zones.unshift("UTC");
+    for (const z of zones) { const o = document.createElement("option"); o.value = o.textContent = z; sel.appendChild(o); }
+  }
+  let tz = S.tz;
+  // a fresh deploy starts on UTC; suggest the browser's zone until one is saved
+  const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (tz === "UTC" && S.source === "none" && local) tz = local;
+  sel.value = tz;
+  $("#contact").value = S.contact || "";
+  $("#signout").hidden = S.mode !== "password";
+}
+
+function renderAll() { renderPeople(); renderStatus(); renderGeneral(); }
+
+async function startRefresh(text) {
+  const btn = $("#refreshbtn"), msg = $("#refreshmsg");
+  btn.disabled = true; msg.className = "msg"; msg.textContent = text || "Refreshing...";
+  const t0 = Date.now() / 1000;
+  await fetch("/refresh", { method: "POST" }).catch(() => {});
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const s = await fetch("/status").then(r => r.json()).catch(() => null);
+    if (s && !s.running && s.last >= t0) break;
+  }
+  const r = await api("/api/settings");
+  btn.disabled = false;
+  if (r.ok) { S = r.data; renderAll(); }
+  if (S.lastRefresh && S.lastRefresh.ok) { msg.className = "msg ok"; msg.textContent = "Done. "; const a = document.createElement("a"); a.href = "/"; a.textContent = "Open the dashboard"; msg.appendChild(a); }
+  else { msg.className = "msg err"; msg.textContent = "The refresh did not finish cleanly. See the notes above."; }
+}
+
+$("#refreshbtn").addEventListener("click", () => startRefresh());
+$("#addbtn").addEventListener("click", () => { const slot = $("#newform"); if (!slot.firstChild) openForm(slot, null); });
+$("#generalform").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#generalmsg");
+  const r = await api("/api/settings", { method: "POST", body: JSON.stringify({ tz: $("#tz").value, contact: $("#contact").value }) });
+  if (!r.ok) { msg.className = "msg err"; msg.textContent = r.error; return; }
+  S = r.data; renderAll(); msg.className = "msg ok"; msg.textContent = "Saved.";
+});
+
+api("/api/settings").then(r => {
+  if (!r.ok) { $("#people").textContent = r.error; return; }
+  S = r.data; renderAll();
+  // save the suggested zone on a fresh deploy so the first refresh uses it
+  if (S.source === "none" && S.tz === "UTC" && $("#tz").value !== "UTC") {
+    api("/api/settings", { method: "POST", body: JSON.stringify({ tz: $("#tz").value }) }).then(x => { if (x.ok) S = x.data; });
+  }
+  if (!S.people.length) $("#addbtn").click();
+});
+</script>
+</body>
+</html>

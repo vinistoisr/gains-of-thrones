@@ -1,0 +1,61 @@
+# Deploy with the "Deploy to Cloudflare" button in the README, or from a clone:
+#   npx wrangler deploy
+# Needs the Workers Paid plan: one refresh uses seconds of CPU, the Free plan allows 10 ms.
+#
+# The cron fetches Ultrahuman and the workout log, summarises, writes the brief
+# and the Workers AI weekly note, renders dashboard.html into R2 and sends the
+# Web Push briefs. People, tokens and the time zone are set on /settings.
+name = "gains-of-thrones"
+main = "src/worker.js"
+compatibility_date = "2025-10-01"
+# the page embeds pipeline function source (lift.js, stats.js); keep-names would wrap it in __name()
+keep_names = false
+
+# Reachable at https://gains-of-thrones.<your-subdomain>.workers.dev, behind the
+# APP_PASSWORD sign-in. To use your own domain instead, add a custom domain to
+# the Worker in the Cloudflare dashboard (Settings, Domains & Routes).
+workers_dev = true
+preview_urls = false
+
+# icons, fonts, three.js and the 3D model; no personal data lives here
+[assets]
+directory = "./public"
+
+# template.html and settings.html imported as strings
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "gains-of-thrones"
+
+[ai]
+binding = "AI"
+
+# a full rebuild parses every stored raw day file; leave headroom
+[limits]
+cpu_ms = 120000
+
+# Every 15 min: refresh at the local-time slots in worker.js, send due push briefs.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+# Liftoff mints version-pinned API hosts and retires old ones; bump this when the
+# refresh starts failing with "server is deprecated" (match the app's version).
+LIFTOFF_API_BASE = "https://v2-13-10.api.getgymbros.com"
+# Workers AI model for the weekly note
+AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+
+# Secrets (Cloudflare dashboard, or `npx wrangler secret put NAME`):
+#   APP_PASSWORD   the sign-in password (the Deploy button asks for it)
+#   API_TOKEN      optional: lets a script or agent GET /coach and /status with
+#                  "Authorization: Bearer <token>"
+# Optional Cloudflare Access mode instead of the password: set the vars
+# ACCESS_TEAM (https://<team>.cloudflareaccess.com), ACCESS_AUD (the Access app's
+# AUD tag) and EMAIL_USERS ({"email": "person-id"}), see README.
+
+[observability]
+enabled = true

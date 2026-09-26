@@ -1,0 +1,17 @@
+# health data and personal config never go to git
+data/
+users.json
+brief.json
+wrangler.local.toml
+.dev.vars
+.dev-data/
+node_modules/
+.wrangler/
+*.bak-*
+__pycache__/
+
+# local render outputs (dev.mjs)
+out*.html
+out-brief.json
+out-coach-*.md
+.playwright-mcp/

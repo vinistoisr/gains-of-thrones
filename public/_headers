@@ -1,0 +1,12 @@
+/Sora.woff2
+  Cache-Control: public, max-age=31536000, immutable
+/DMSans.woff2
+  Cache-Control: public, max-age=31536000, immutable
+/three/*
+  Cache-Control: public, max-age=604800
+/muscles.glb
+  Cache-Control: public, max-age=604800
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache

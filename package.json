@@ -1,0 +1,27 @@
+{
+  "name": "gains-of-thrones",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --import ./test/register.mjs --test \"test/*.test.mjs\"",
+    "render": "node --import ./test/register.mjs dev.mjs",
+    "deploy": "wrangler deploy",
+    "deploy:local": "wrangler deploy -c wrangler.local.toml"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "APP_PASSWORD": {
+        "description": "The password for signing in to your dashboard. Use a long one: this page will hold your sleep and training data."
+      },
+      "BUCKET": {
+        "description": "Private storage for your data, settings and tokens."
+      },
+      "AI": {
+        "description": "Workers AI writes the short weekly note."
+      }
+    }
+  }
+}
