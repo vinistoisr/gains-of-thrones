@@ -46,7 +46,7 @@ export const PROVIDERS = {
     // offline + consent return a refresh token every time; no include_granted_scopes,
     // which can merge older Google Fit scopes into the token and get it rejected (403)
     authParams: { access_type: "offline", prompt: "consent" },
-    appHelp: "https://console.cloud.google.com/apis/credentials",
+    appHelp: "https://console.cloud.google.com/projectcreate",
   },
 };
 export const OAUTH_PROVIDERS = Object.keys(PROVIDERS);

@@ -77,14 +77,26 @@ Updates: the Deploy button makes your copy a separate repository. To pull in lat
 
 Both only share data through a sign-in, so your dashboard needs its own app registration with each one. It is free and you do it once; the settings page walks through it under **Sign-in apps** and shows the redirect URI to copy.
 
-**Oura:** in [My Applications](https://cloud.ouraring.com/oauth/applications), create an application, set its redirect URI to the one shown on the settings page (it ends in `/oauth/oura/callback`), and paste the client ID and secret into the settings page.
+Open your dashboard's settings page first: the **Sign-in apps** section shows the exact redirect URI for your deployment, with a Copy button. You need it in both consoles.
 
-**Google Health:**
-1. In the [Google Cloud console](https://console.cloud.google.com/), create a project and enable the **Google Health API**.
-2. Set up the OAuth consent screen as **External**, then set its publishing status to **In production**. In Testing, Google ends every sign-in after 7 days.
-3. Create an OAuth client ID of type **Web application** with the redirect URI from the settings page (it ends in `/oauth/google/callback`).
-4. Paste the client ID and secret into the settings page.
-5. When you connect, Google says the app is unverified. Choose Advanced, then continue. Unverified apps are limited to 100 people, which is plenty for a personal dashboard.
+**Oura** (about 5 minutes)
+1. Sign in at [My Applications](https://cloud.ouraring.com/oauth/applications) with your Oura account and create a new application.
+2. Fill in the name and the other required fields; for a personal dashboard your dashboard's address works as the website.
+3. Add the redirect URI from the settings page (it ends in `/oauth/oura/callback`). It must match exactly, including `https://`.
+4. Save, then copy the **client ID** and **client secret** into the Oura box on the settings page and press Save.
+5. Press **Connect Oura** next to each Oura person and approve the access. An unapproved Oura app works for up to 10 people.
+
+**Google Health** (about 10 minutes)
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a new project (any name).
+2. Enable the API: open the [Google Health API page](https://console.cloud.google.com/apis/library/health.googleapis.com) with that project selected and press **Enable**.
+3. Open **Google Auth Platform** (search for it in the console). Under **Branding**, enter an app name and your email as the support contact.
+4. Under **Audience**, choose **External**, then press **Publish app** so the publishing status reads **In production**. Left in Testing, Google ends every sign-in after 7 days.
+5. Under **Data Access**, press **Add or remove scopes**, search for "Google Health API", tick the three read-only scopes for **sleep**, **health metrics and measurements**, and **activity and fitness**, then press **Update** and **Save**.
+6. Under **Clients**, create a client of type **Web application**, add the redirect URI from the settings page (it ends in `/oauth/google/callback`) under **Authorized redirect URIs**, and create it.
+7. Copy the **client ID** and **client secret** into the Google Health box on the settings page and press Save.
+8. Press **Connect Google Health** next to each Google person. Google warns that the app is unverified, because you have not sent it to Google for review: choose **Advanced**, then **Go to (your app name)**, and allow access. An unverified app works for up to 100 people.
+
+If you later move the dashboard to a custom domain, the redirect URI changes: add the new one in both consoles, then press Reconnect for each person.
 
 The tokens are stored in your bucket and refreshed automatically. If a sign-in is revoked or expires, the settings page shows **Reconnect** next to that person.
 

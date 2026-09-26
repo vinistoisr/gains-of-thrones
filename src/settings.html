@@ -314,12 +314,19 @@ function renderGeneral() {
 }
 
 const APP_STEPS = {
-  oura: ["Open the Oura developer portal and create an application (free).", "Set its redirect URI to the address below, exactly.", "Copy the client ID and client secret into the fields here."],
-  google: ["In Google Cloud, create a project and enable the Google Health API.",
-    "Set up the OAuth consent screen as External, then set its publishing status to In production. Left in Testing, Google ends every sign-in after 7 days.",
-    "Create an OAuth client ID of type Web application with the redirect URI below, exactly.",
+  oura: ["Sign in to Oura's My Applications page and create an application (free).",
+    "Fill in the required fields; your dashboard's address works as the website.",
+    "Add the redirect URI below, exactly as shown.",
+    "Save, then copy the client ID and client secret into the fields here.",
+    "Press Connect Oura next to each Oura person. Up to 10 people per app until Oura approves it."],
+  google: ["In the Google Cloud console, create a new project.",
+    "Enable the Google Health API for that project (APIs & Services, Library, search Google Health API, Enable).",
+    "Open Google Auth Platform. Under Branding, enter an app name and your email.",
+    "Under Audience, choose External, then press Publish app so the status reads In production. Left in Testing, Google ends every sign-in after 7 days.",
+    "Under Data Access, add the three read-only Google Health API scopes: sleep, health metrics and measurements, activity and fitness.",
+    "Under Clients, create a Web application client with the redirect URI below under Authorized redirect URIs.",
     "Copy the client ID and client secret into the fields here.",
-    "When you connect, Google warns that the app is unverified: choose Advanced, then continue. An unverified app is limited to 100 people, which is plenty here."],
+    "Press Connect Google Health next to each person. Google warns the app is unverified: choose Advanced, then go to your app. Up to 100 people."],
 };
 function renderApps() {
   const box = $("#apps"); box.textContent = "";
