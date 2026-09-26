@@ -1,9 +1,10 @@
 # Gains of Thrones
 
 
-A private dashboard for sleep, recovery and strength training. It combines an
-Ultrahuman Ring with a workout log from Liftoff or Hevy, runs entirely in your
-own Cloudflare account, and refreshes itself every 6 hours.
+A private dashboard for sleep, recovery and strength training. It combines
+sleep data from an Ultrahuman Ring, an Oura Ring or Google Health (Fitbit, Pixel
+Watch) with a workout log from Liftoff or Hevy, runs entirely in your own
+Cloudflare account, and refreshes itself every 6 hours.
 
 <p align="center"><img src="docs/spin.gif" width="640" alt="Hard sets per muscle for the last 7 days, painted on a rotating 3D body"></p>
 
@@ -48,7 +49,10 @@ It is a personal project. The numbers come from consumer devices and the analysi
 
 ## What you need
 
-- **An Ultrahuman Ring and an Ultrahuman API token.** Generate a personal token in the Ultrahuman developer portal at [vision.ultrahuman.com](https://vision.ultrahuman.com/developer-docs). If your account does not offer one, Ultrahuman describes how to request access in [Accessing the Ultrahuman Partnership API](https://www.ultrahuman.com/blog/accessing-the-ultrahuman-partnership-api/).
+- **A source of sleep data**, one per person:
+  - **Ultrahuman Ring:** an API token. Generate a personal token in the Ultrahuman developer portal at [vision.ultrahuman.com](https://vision.ultrahuman.com/developer-docs). If your account does not offer one, Ultrahuman describes how to request access in [Accessing the Ultrahuman Partnership API](https://www.ultrahuman.com/blog/accessing-the-ultrahuman-partnership-api/).
+  - **Oura Ring:** an Oura account. Oura stopped issuing personal tokens in December 2025, so this uses a sign-in: you register a free app once (see [Oura and Google Health](#oura-and-google-health)), then each person presses Connect. Oura allows 10 people per app until Oura approves it.
+  - **Google Health** (Fitbit, Pixel Watch and other devices that write to it): a Google account, plus a free Google Cloud project with the Google Health API turned on. Same sign-in flow. Google publishes no sleep score or recovery score, so those parts of the dashboard stay hidden for a Google Health person; everything else (sleep time and stages, bedtimes, HRV, resting heart rate, skin temperature, steps, SpO2, VO2 max) works.
 - **Optional: a workout log.**
   - **Liftoff:** your Liftoff email (or username) and password. They are used once to sign in, and only the sign-in token is stored. Liftoff has no public API; this uses the same calls as the app, as the open-source [liftoff-export-cli](https://github.com/quantcli/liftoff-export-cli) does, and can break when Liftoff changes them.
   - **Hevy:** a Hevy Pro subscription and an API key from [hevy.com/settings?developer](https://hevy.com/settings?developer).
@@ -62,12 +66,29 @@ It is a personal project. The numbers come from consumer devices and the analysi
 2. When it asks for **APP_PASSWORD**, choose a long password. It protects all of your data.
 3. Open the Worker's address. It looks like `https://gains-of-thrones.<your-subdomain>.workers.dev` and is shown at the end of the deploy.
 4. Sign in with the password. The settings page opens.
-5. Add yourself: a name, your Ultrahuman token and, if you want, Liftoff or Hevy. Each token is checked with its service when you save, so a typo shows up right away.
+5. Add yourself: a name, where your sleep data comes from and, if you want, Liftoff or Hevy. An Ultrahuman token and the workout log are checked with their service when you save, so a typo shows up right away. For Oura or Google Health, register the app first (below), then press Connect next to your name.
 6. The first refresh starts on its own. When it finishes, open the dashboard.
 
 After that it refreshes at 00:20, 06:20, 12:20 and 18:20 in the time zone set on the settings page. The **Refresh now** button runs one immediately.
 
 Updates: the Deploy button makes your copy a separate repository. To pull in later changes, sync your copy with this one on GitHub (Sync fork, or a pull request from upstream). Cloudflare redeploys it on each push.
+
+### Oura and Google Health
+
+Both only share data through a sign-in, so your dashboard needs its own app registration with each one. It is free and you do it once; the settings page walks through it under **Sign-in apps** and shows the redirect URI to copy.
+
+**Oura:** in [My Applications](https://cloud.ouraring.com/oauth/applications), create an application, set its redirect URI to the one shown on the settings page (it ends in `/oauth/oura/callback`), and paste the client ID and secret into the settings page.
+
+**Google Health:**
+1. In the [Google Cloud console](https://console.cloud.google.com/), create a project and enable the **Google Health API**.
+2. Set up the OAuth consent screen as **External**, then set its publishing status to **In production**. In Testing, Google ends every sign-in after 7 days.
+3. Create an OAuth client ID of type **Web application** with the redirect URI from the settings page (it ends in `/oauth/google/callback`).
+4. Paste the client ID and secret into the settings page.
+5. When you connect, Google says the app is unverified. Choose Advanced, then continue. Unverified apps are limited to 100 people, which is plenty for a personal dashboard.
+
+The tokens are stored in your bucket and refreshed automatically. If a sign-in is revoked or expires, the settings page shows **Reconnect** next to that person.
+
+These two integrations are built from Oura's and Google's published API descriptions and tested against those formats; they have not yet been run against a real Oura or Google account. If something looks wrong, please open an issue.
 
 ### Notifications
 
@@ -79,7 +100,7 @@ The settings page holds up to eight people, each with their own tokens. Everyone
 
 ## Your data
 
-- Everything is stored in an R2 bucket in your own Cloudflare account: raw daily ring data, workouts, the rendered page, and the tokens you enter on the settings page. Nothing is sent anywhere else except requests to Ultrahuman, Liftoff or Hevy for your own data, and to Workers AI (also in your account) for the weekly note.
+- Everything is stored in an R2 bucket in your own Cloudflare account: raw daily ring data, workouts, the rendered page, and the tokens you enter on the settings page. Nothing is sent anywhere else except requests to Ultrahuman, Oura, Google, Liftoff or Hevy for your own data, and to Workers AI (also in your account) for the weekly note.
 - Tokens are stored in the bucket and never sent back to the browser. The settings page only shows whether each one is connected.
 - Your Liftoff password is not stored.
 - Each person picks kg or lb on the settings page, and every chart, record, tooltip, coach note and push text uses it. Hevy data is stored in kg as logged and converted only when a person picks lb. Liftoff loads are read as logged in the chosen unit; an exercise with its own unit override in Liftoff is converted. Hevy RPE becomes reps in reserve (10 minus RPE).
@@ -150,6 +171,7 @@ How it fits together:
 | `src/auth.js` | Password sessions, sign-in throttling, Access token checks |
 | `src/config.js`, `src/settings.js`, `src/settings.html` | People, tokens, time zone and the settings page |
 | `src/pipeline/sources.js` | Ultrahuman, Liftoff and Hevy clients; Hevy is converted to the Liftoff shape |
+| `src/oauth.js`, `src/pipeline/rings.js` | Oura and Google Health: the sign-in flow, token refresh, and the conversion into the same per-night record |
 | `src/pipeline/summarize.js` | Raw data to one record per day |
 | `src/pipeline/brief.js`, `insights.js`, `stats.js` | The daily brief, the weekly plan, insight cards and the correlation statistics |
 | `src/pipeline/ai.js` | The weekly note (Workers AI, JSON output, numbers computed before the model sees them) |
@@ -160,4 +182,4 @@ How it fits together:
 
 The code is under the MIT licence (`LICENSE`). The 3D muscle model, the muscle-map paths, three.js and the fonts keep their own licences, listed in `THIRD_PARTY.md`. The 3D model is CC BY-SA 4.0.
 
-This project is not affiliated with Ultrahuman, Liftoff or Hevy.
+This project is not affiliated with Ultrahuman, Oura, Google, Liftoff or Hevy.

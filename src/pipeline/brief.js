@@ -1,6 +1,6 @@
 // The proactive daily brief (short nights, bedtime target,
 // ring charge cadence, hypertrophy habit check, push texts).
-import { mean, median, pstdev, pyRound, fmtF, weekday, addDays, daysBetween, mondayOf } from "./util.js";
+import { mean, median, pstdev, pyRound, fmtF, weekday, addDays, daysBetween, mondayOf, hasNight } from "./util.js";
 import { GROUPS, muscleGroup, fractionalSets } from "./muscles.js";
 
 // Weekly fractional-set tiers per muscle group. Tiers from Pelland et al. 2025
@@ -346,7 +346,7 @@ export function hrvState(n) {
  * fresh and the history is empty.
  */
 export function computeBrief(days, today, planStore = null, unit = "lb") {
-  const nights = days.filter((d) => d.score != null);
+  const nights = days.filter(hasNight);
   const out = { generated: today, hasSleep: nights.length > 0, unit };
   if (!nights.length) { out.push = {}; return out; }
   const last = nights[nights.length - 1];

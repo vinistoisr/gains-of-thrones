@@ -1,5 +1,5 @@
 // Rule-based insight cards and their HTML.
-import { mean, median, pstdev, fmtF, fmtComma0, fmtSigned, lblShort, lblLong, addDays } from "./util.js";
+import { mean, median, pstdev, fmtF, fmtComma0, fmtSigned, lblShort, lblLong, addDays, hasNight } from "./util.js";
 
 function fmtH(hours) {
   const h = Math.trunc(hours);
@@ -7,7 +7,7 @@ function fmtH(hours) {
 }
 
 export function buildInsights(days, today, unit = "lb") {
-  const slept = days.filter((x) => x.score != null);
+  const slept = days.filter(hasNight);
   const out = [];
   if (!slept.length) return out;
 
@@ -25,7 +25,7 @@ export function buildInsights(days, today, unit = "lb") {
   }
 
   // 2. ring charging gaps
-  const missing = days.filter((x) => x.score == null && x.d !== today).map((x) => x.d);
+  const missing = days.filter((x) => !hasNight(x) && x.d !== today).map((x) => x.d);
   if (missing.length >= 3) {
     const gaps = [];
     for (let i = 0; i < missing.length - 1; i++) {

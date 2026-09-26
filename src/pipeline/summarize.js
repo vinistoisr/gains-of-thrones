@@ -271,6 +271,16 @@ function g(src, ...path) {
   return cur === undefined ? null : cur;
 }
 
+/** Bedtime and wake fields of a ring record from two epoch-second instants (null-safe). */
+export function clockFields(bt, wt) {
+  return {
+    bedRel: bt ? pyRound(relHour(bt), 2) : null,
+    wakeRel: wt ? pyRound(relHour(wt), 2) : null,
+    bed: bt ? hm(bt) : null,
+    wake: wt ? hm(wt) : null,
+  };
+}
+
 export function minimalRec(d) {
   return { d, lbl: lblShort(d), wd: wdName(d), dow: weekday(d), wk: lblShort(mondayOf(d)) };
 }

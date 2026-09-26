@@ -1,7 +1,8 @@
 // Deployment settings, per-person credentials and the Web Push key pair, all in
 // the R2 bucket so a fresh deploy needs nothing beyond the password:
-//   config/settings.json  {tz, people: [{id, name, workouts, units}], contact, origin}
-//   config/secrets.json   {uid: {ultrahuman, liftoff, hevy}}   never sent to the browser
+//   config/settings.json  {tz, people: [{id, name, ring, workouts, units}], contact, origin}
+//   config/secrets.json   {uid: {ultrahuman, liftoff, hevy, oura, google}, _apps: {oura, google}}
+//                         never sent to the browser; oura/google hold OAuth token records (oauth.js)
 //   config/vapid.json     {publicKey, privateJwk}              generated on first use
 //
 // A deployment configured through Worker vars and secrets instead keeps working:
@@ -13,6 +14,9 @@
 
 export const WORKOUT_SOURCES = ["liftoff", "hevy"];
 export const UNITS = ["kg", "lb"];
+// where a person's sleep and recovery data comes from; oura and google sign in
+// with OAuth (oauth.js), ultrahuman with a personal token
+export const RING_SOURCES = ["ultrahuman", "oura", "google"];
 // Hevy stores kilograms; Liftoff shows loads in the unit its user picked, and the
 // posts carry no account-level unit, so a Liftoff person defaults to lb (the
 // original setup) and anyone can switch on the settings page.
@@ -36,7 +40,8 @@ export function normPerson(p) {
   if (!/^[a-z0-9_-]{1,32}$/.test(id)) return null;
   const workouts = WORKOUT_SOURCES.includes(p.workouts) ? p.workouts : p.liftoff ? "liftoff" : null;
   const units = UNITS.includes(p.units) ? p.units : defaultUnits(workouts);
-  return { id, name: String(p.name || id).slice(0, 40), workouts, units };
+  const ring = RING_SOURCES.includes(p.ring) ? p.ring : "ultrahuman";
+  return { id, name: String(p.name || id).slice(0, 40), ring, workouts, units };
 }
 
 /** A new id from a display name, unique among `taken`. */
@@ -79,6 +84,10 @@ export async function loadSecrets(env) {
   return (await getJSON(env, SECRETS_KEY)) || {};
 }
 
+export async function saveSecrets(env, all) {
+  await putJSON(env, SECRETS_KEY, all);
+}
+
 /** Set (value) or clear (null) one credential. */
 export async function setSecret(env, uid, kind, value) {
   const all = await loadSecrets(env);
@@ -98,17 +107,23 @@ export async function dropSecrets(env, uid) {
 /** One credential: the stored one, else the Worker secret of the older setup. */
 export function credential(env, secrets, uid, kind) {
   const stored = secrets && secrets[uid] && secrets[uid][kind];
-  if (stored) return String(stored).trim();
+  if (stored && typeof stored === "string") return stored.trim();
   const v = env[`${SECRET_ENV[kind]}_${uid.toUpperCase().replace(/-/g, "_")}`];
   return v ? String(v).trim() : null;
 }
 
 /** What the settings page may see: which credentials exist, never their values. */
 export function peopleView(env, settings, secrets) {
-  return settings.people.map((p) => ({
-    ...p,
-    has: Object.fromEntries(Object.keys(SECRET_ENV).map((k) => [k, !!credential(env, secrets, p.id, k)])),
-  }));
+  return settings.people.map((p) => {
+    const has = Object.fromEntries(Object.keys(SECRET_ENV).map((k) => [k, !!credential(env, secrets, p.id, k)]));
+    const reconnect = {};
+    for (const k of ["oura", "google"]) {
+      const t = secrets && secrets[p.id] && secrets[p.id][k];
+      has[k] = !!(t && t.refresh);
+      reconnect[k] = !!(t && t.needsReconnect);
+    }
+    return { ...p, has, reconnect };
+  });
 }
 
 // ---------------------------------------------------------------- Web Push keys

@@ -46,7 +46,9 @@ export function renderPage({ users, datasets, briefs, narratives, today, vapidPu
   html = rep(html, "__USERCSS_L__", meta.map((m) => `--u-${m.id}:${m.c};`).join(""));
   html = rep(html, "__USERCSS_D__", meta.map((m) => `--u-${m.id}:${m.cd};`).join(""));
   const logs = [...new Set(users.filter((u) => datasets[u.id] && u.workouts).map((u) => (u.workouts === "hevy" ? "Hevy" : "Liftoff")))];
-  html = rep(html, "__SOURCES__", anyLift && logs.length ? `Ultrahuman Ring + ${logs.join(" + ")}` : "Ultrahuman Ring");
+  const RING_LABEL = { ultrahuman: "Ultrahuman Ring", oura: "Oura Ring", google: "Google Health" };
+  const rings = [...new Set(users.filter((u) => datasets[u.id]).map((u) => RING_LABEL[u.ring] || RING_LABEL.ultrahuman))];
+  html = rep(html, "__SOURCES__", [...rings, ...(anyLift ? logs : [])].join(" + "));
   html = rep(html, "__NDAYS__", String(ndays));
   html = rep(html, "__BUILDTS__", String(Math.floor(now / 1000)));
   html = rep(html, "__GENERATED__", `${String(p.h).padStart(2, "0")}:${String(p.min).padStart(2, "0")}`);

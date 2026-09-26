@@ -37,6 +37,13 @@ export function localParts(ms) {
   };
 }
 
+/**
+ * A recorded night: it has a sleep score, or it comes from a source with no score
+ * (rings.js marks those records nsc: 1) and has sleep time. Ultrahuman nights keep
+ * the original rule, so their counts do not move.
+ */
+export const hasNight = (d) => d.score != null || (d.nsc === 1 && d.slh != null);
+
 /** Today's local date as YYYY-MM-DD. */
 export function todayLocal(now = Date.now()) {
   return localParts(now).date;

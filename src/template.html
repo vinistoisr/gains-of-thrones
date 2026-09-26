@@ -728,6 +728,8 @@ function el(tag, attrs, parent){
 function fmtH(h){ if (h == null) return "-"; const H = Math.floor(h); return H + "h " + String(Math.round((h - H) * 60)).padStart(2, "0") + "m"; }
 function fmtK(v){ return v >= 10000 ? (v / 1000).toFixed(1) + "K" : Math.round(v).toLocaleString(); }
 // loads arrive in the viewed person's unit (settings: kg or lb; pipeline/sources.js postsInUnit)
+// a recorded night: a sleep score, or sleep time from a source that has no score (Google Health; rings.js sets nsc)
+const NIGHT = x => x.score != null || (x.nsc === 1 && x.slh != null);
 function UNIT(){ const id = CURUSER === "both" ? USERS[0].id : CURUSER; const u = USERS.find(x => x.id === id); return (u && u.u) || "lb"; }
 function fmtLb(v){ const u = UNIT(); return v >= 10000 ? Math.round(v / 1000) + "k " + u : v >= 1000 ? (v / 1000).toFixed(1) + "k " + u : Math.round(v).toLocaleString() + " " + u; }
 function mean(a){ a = a.filter(v => v != null); return a.length ? a.reduce((s, v) => s + v, 0) / a.length : null; }
@@ -975,6 +977,11 @@ function chartHrv(days){
 }
 function lineCard(id, title, sub, days, key, colorVar, unit, dom, smooth){
   const card = document.getElementById(id);
+  // a metric this person's source never reports (Oura and Google Health have no
+  // restorative sleep or grogginess): no card at all, rather than an empty frame
+  const everHas = DAYS.some(d => d[key] != null);
+  card.style.display = everHas ? "" : "none";
+  if (!everHas) return;
   const plotH = 170;
   const fr = frame(card, title, sub, plotH);
   const W = fr.W;
@@ -1015,6 +1022,9 @@ function lineCard(id, title, sub, days, key, colorVar, unit, dom, smooth){
 
 function chartScores(days){
   const card = document.getElementById("c-score");
+  const everHas = DAYS.some(d => d.score != null || d.rec != null);
+  card.style.display = everHas ? "" : "none";
+  if (!everHas) return;
   const plotH = 190;
   const root = getComputedStyle(document.documentElement);
   const cSleep = root.getPropertyValue("--c-sleep").trim(), cRec = root.getPropertyValue("--c-rec").trim();
@@ -1177,7 +1187,7 @@ function weekStrip(){
   // Recorded nights are counted, so a charging gap cannot pass for a change.
   const age = d => daysBetween(d.d, TODAY);
   const cur = DAYS.filter(d => age(d) >= 0 && age(d) < 7), prev = DAYS.filter(d => age(d) >= 7 && age(d) < 35);
-  const nCur = cur.filter(d => d.score != null).length, nPrev = prev.filter(d => d.score != null).length;
+  const nCur = cur.filter(NIGHT).length, nPrev = prev.filter(NIGHT).length;
   if (nCur < 5 || nPrev < 5){
     const note = document.createElement("div"); note.className = "wow";
     const t = document.createElement("span"); t.className = "wl";
@@ -1220,7 +1230,7 @@ function coverageStrip(){
   // recorded it, hollow when not, weekday initial under it so a gap that lands
   // on a lifting night is visible. Last night only counts once it is recorded or
   // the day is over, so a ring that has not synced yet is not drawn as a gap.
-  const have = new Set(DAYS.filter(d => d.score != null).map(d => d.d));
+  const have = new Set(DAYS.filter(NIGHT).map(d => d.d));
   const end = have.has(TODAY) ? TODAY : addDays(TODAY, -1);
   const wrap = document.createElement("div"); wrap.className = "cov";
   const row = document.createElement("div"); row.className = "covrow";
@@ -1385,7 +1395,7 @@ function gspark(vals, w, h, color){
 
 function renderHero(){
   const hero = document.getElementById("hero");
-  const d = [...DAYS].reverse().find(x => x.score != null);
+  const d = [...DAYS].reverse().find(NIGHT);
   if (!d){ hero.hidden = true; renderSleepCard(); renderRecov(); renderStages(); return; }
   hero.hidden = false;
   FRESH_THROUGH = d.lbl;
@@ -1406,7 +1416,7 @@ function renderHero(){
       + '<div class="o3tip" hidden></div>';
     const st = document.createElement("div"); st.className = "o3stats"; hero.appendChild(st);
   }
-  const nights = DAYS.filter(x => x.score != null).slice(-14);
+  const nights = DAYS.filter(NIGHT).slice(-14);
   // last night: 4 numbers, each with one comparison
   const last30 = DAYS.slice(-30), avg = get => mean(last30.map(get));
   const hb = BRIEF[CURUSER === "both" ? USERS[0].id : CURUSER];
@@ -1423,7 +1433,8 @@ function renderHero(){
   };
   const aS = avg(x => x.slh), dS = d.slh != null && aS != null ? d.slh - aS : null;
   stat("Asleep", d.slh != null ? fmtH(d.slh) : "-", "", dS == null ? "" : (dS >= 0 ? "+" : "-") + fmtH(Math.abs(dS)) + " vs 30-day avg", dS == null ? "" : dS >= 0 ? "up" : "down");
-  stat("Sleep score", String(d.score), "/100", band(d.score, "--c-sleep").word, d.score >= 75 ? "up" : "down");
+  if (d.score != null) stat("Sleep score", String(d.score), "/100", band(d.score, "--c-sleep").word, d.score >= 75 ? "up" : "down");
+  else stat("Efficiency", d.eff != null ? String(d.eff) : "-", "%", "time in bed spent asleep", d.eff != null && d.eff >= 85 ? "up" : "down");
   const hsp = gspark(nights.map(x => x.hrv), 150, 30, cs("--or")); hsp.setAttribute("aria-label", "HRV, last " + nights.length + " nights"); hsp.setAttribute("role", "img"); hsp.removeAttribute("aria-hidden");
   stat("HRV", d.hrv != null ? String(d.hrv) : "-", "ms", hsn ? HRV_WORD[hsn] : "", hsn === "below" ? "down" : hsn ? "up" : "", hsp);
   const aR = avg(x => x.rhr), dR = d.rhr != null && aR != null ? d.rhr - aR : null;
@@ -1476,7 +1487,7 @@ function renderSleepCard(){
 function renderRecov(){
   const card = document.getElementById("recov");
   if (!card) return;
-  const d = [...DAYS].reverse().find(x => x.score != null);
+  const d = [...DAYS].reverse().find(NIGHT);
   if (!d){ card.hidden = true; return; }
   card.hidden = false; card.textContent = "";
   const last30 = DAYS.slice(-30), avg = get => mean(last30.map(get));
@@ -1487,15 +1498,16 @@ function renderRecov(){
   ghead(card, "heart", "Recovery", "Night of " + d.lbl, ex);
   const row = document.createElement("div"); row.className = "rrow";
   const g = document.createElement("div"); g.className = "gauge";
-  const R0 = 63, C = 2 * Math.PI * R0, val = d.rec != null ? d.rec : d.score;
+  // the source's recovery score, else its sleep score, else sleep efficiency (Google Health has no scores)
+  const R0 = 63, C = 2 * Math.PI * R0, val = d.rec != null ? d.rec : d.score != null ? d.score : d.eff;
   const svg = el("svg", { viewBox: "0 0 140 140", width: 140, height: 140, "aria-hidden": "true" }, null);
   el("circle", { cx: 70, cy: 70, r: R0, fill: "none", stroke: cs("--grid"), "stroke-width": 13 }, svg);
   el("circle", { cx: 70, cy: 70, r: R0, fill: "none", stroke: cs("--lime"), "stroke-width": 13, "stroke-linecap": "round",
     "stroke-dasharray": (C * val / 100).toFixed(1) + " " + C.toFixed(1) }, svg);
   g.appendChild(svg);
   const gv = document.createElement("div"); gv.className = "gv"; gv.appendChild(gnum(String(val)));
-  const gl = document.createElement("div"); gl.className = "glab"; gl.textContent = d.rec != null ? "recovery" : "sleep score"; gv.appendChild(gl);
-  g.appendChild(gv); row.appendChild(g);
+  const gl = document.createElement("div"); gl.className = "glab"; gl.textContent = d.rec != null ? "recovery" : d.score != null ? "sleep score" : "efficiency"; gv.appendChild(gl);
+  g.appendChild(gv); if (val != null) row.appendChild(g);
   const rl = document.createElement("div"); rl.className = "rl";
   const line = (k, v, s) => { const r = document.createElement("div"); const a = document.createElement("span"); a.textContent = k; r.appendChild(a);
     const b = document.createElement("b"); b.textContent = v; if (s){ const sm = document.createElement("small"); sm.textContent = s; b.appendChild(sm); } r.appendChild(b); rl.appendChild(r); };
@@ -2387,7 +2399,7 @@ function renderTiles(win, prev, label){
     } else dl.textContent = " ";
     tile.appendChild(dl);
     if (t.night){   // sleep-derived: say how many recorded nights the average is built from
-      const nn = win.filter(d => d.score != null).length;
+      const nn = win.filter(NIGHT).length;
       const span = win.length ? daysBetween(win[0].d, win[win.length - 1].d) + 1 : 0;
       const nl = document.createElement("div"); nl.className = "dl";
       nl.textContent = nn + " of " + span + " nights recorded";
@@ -2590,7 +2602,7 @@ function renderCompare(nSel){
   const hrow = document.createElement("div"); hrow.className = "cmphero";
   for (const u of USERS){
     const daysU = DATASETS[u.id] || [];
-    const last = [...daysU].reverse().find(x => x.score != null);
+    const last = [...daysU].reverse().find(NIGHT);
     if (!last) continue;
     const c = document.createElement("div"); c.className = "card cmpu";
     const h3 = document.createElement("h3");
@@ -2899,7 +2911,7 @@ function renderBody3D(uid, b){
   const side = card.querySelector(".o3side");
   if (!side) return;
   side.textContent = "";
-  const night = [...(DATASETS[uid] || [])].reverse().find(x => x.score != null);
+  const night = [...(DATASETS[uid] || [])].reverse().find(NIGHT);
   const h = document.createElement("h2"); h.className = "ovt"; h.textContent = "Last night and this week"; side.appendChild(h);
   const sub = document.createElement("div"); sub.className = "o3sub";
   sub.textContent = (night ? "Night of " + night.lbl + " \u00b7 " : "") + t.sessions7 + " of " + t.target + " sessions this week";

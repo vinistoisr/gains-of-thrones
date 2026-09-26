@@ -185,3 +185,21 @@ test("password: /push/opened finds the person from the stored subscription", asy
   assert.equal(res.status, 200);
   assert.equal(JSON.parse(objects["state/push-log.json"]).sam[0].opened, true);
 });
+
+test("password: the OAuth routes need a session, and start redirects to the provider", async () => {
+  const objects = {
+    "config/settings.json": JSON.stringify({ people: [{ id: "sam", name: "Sam", ring: "oura" }] }),
+    "config/secrets.json": JSON.stringify({ _apps: { oura: { clientId: "cid", clientSecret: "cs" } } }),
+  };
+  const env = pwEnv(objects);
+  const anon = await page("/oauth/oura/start?person=sam", env, { headers: { Accept: "text/html" } });
+  assert.equal(anon.status, 303);
+  assert.match(anon.headers.get("Location"), /^\/login/);
+  const cookie = (await login(env, PW)).headers.get("Set-Cookie").split(";")[0];
+  const res = await page("/oauth/oura/start?person=sam", env, { headers: { Cookie: cookie } });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get("Location"), /^https:\/\/cloud\.ouraring\.com\/oauth\/authorize\?/);
+  const bad = await page("/oauth/oura/callback?state=nope-nope-nope-nope&code=x", env, { headers: { Cookie: cookie } });
+  assert.equal(bad.status, 303);
+  assert.match(new URLSearchParams(bad.headers.get("Location").split("?")[1]).get("oauth_error"), /already used or has expired/);
+});

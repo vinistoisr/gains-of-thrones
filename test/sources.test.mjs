@@ -135,7 +135,7 @@ test("config: the USERS var stands in until settings.json exists, and the older 
   const s = await loadSettings(env);
   assert.equal(s.source, "env");
   assert.equal(s.tz, "America/Vancouver");
-  assert.deepEqual(s.people, [{ id: "alex", name: "Alex", workouts: "liftoff", units: "lb" }]);
+  assert.deepEqual(s.people, [{ id: "alex", name: "Alex", ring: "ultrahuman", workouts: "liftoff", units: "lb" }]);
   const stored = { BUCKET: bucket({ "config/settings.json": JSON.stringify({ tz: "Europe/Berlin", people: [{ id: "a", name: "A", workouts: "hevy" }] }) }), USERS: env.USERS };
   assert.equal((await loadSettings(stored)).people[0].id, "a");
 });
@@ -179,7 +179,8 @@ test("settings API: adding a Hevy person checks both tokens, never echoes them, 
   const res = await withFetch(f, () => settingsApi(req("POST", "/api/people", { name: "Sam", workouts: "hevy", ultrahuman: "uh-tok", hevy: "hv-key" }), env, new URL("https://h.example/api/people")));
   const out = await res.json();
   assert.equal(res.status, 200, out.error);
-  assert.deepEqual(out.people, [{ id: "sam", name: "Sam", workouts: "hevy", units: "kg", has: { ultrahuman: true, liftoff: false, hevy: true } }]);
+  assert.deepEqual(out.people, [{ id: "sam", name: "Sam", ring: "ultrahuman", workouts: "hevy", units: "kg",
+    has: { ultrahuman: true, liftoff: false, hevy: true, oura: false, google: false }, reconnect: { oura: false, google: false } }]);
   assert.ok(!JSON.stringify(out).includes("uh-tok") && !JSON.stringify(out).includes("hv-key"), "no credential in the response");
   assert.deepEqual(JSON.parse(objects["config/secrets.json"]), { sam: { ultrahuman: "uh-tok", hevy: "hv-key" } });
 

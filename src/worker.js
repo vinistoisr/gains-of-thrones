@@ -26,6 +26,7 @@ import { localParts, setTimeZone } from "./pipeline/util.js";
 import { authMode, identify, tryPassword, makeSession, sessionCookie } from "./auth.js";
 import { loadSettings, rememberOrigin, vapidKeys, vapidSubject } from "./config.js";
 import { settingsApi } from "./settings.js";
+import { OAUTH_PROVIDERS, startAuth, finishAuth } from "./oauth.js";
 import { loginPage, noPasswordPage, safeNext } from "./pages.js";
 import SETTINGS_HTML from "./settings.html";
 
@@ -298,6 +299,21 @@ export default {
     if (who.admin && url.protocol === "https:" && settings.origin !== url.origin) ctx.waitUntil(rememberOrigin(env, url.origin).catch(() => {}));
 
     if (req.method === "GET" && url.pathname === "/settings") return htmlPage(SETTINGS_HTML);
+
+    // OAuth sign-in for Oura and Google Health (oauth.js); both legs need a signed-in admin
+    const om = /^\/oauth\/([a-z]+)\/(start|callback)$/.exec(url.pathname);
+    if (req.method === "GET" && om && OAUTH_PROVIDERS.includes(om[1])) {
+      if (!who.admin) return new Response("Forbidden", { status: 403 });
+      const back = (q) => new Response(null, { status: 303, headers: { Location: `/settings?${new URLSearchParams(q)}`, "Cache-Control": "no-store" } });
+      if (om[2] === "start") {
+        const r = await startAuth(env, om[1], url.searchParams.get("person") || "", url.origin);
+        return r.location ? new Response(null, { status: 302, headers: { Location: r.location, "Cache-Control": "no-store" } }) : back({ oauth_error: r.error });
+      }
+      const r = await finishAuth(env, om[1], url);
+      if (r.error) return back({ oauth_error: r.error });
+      ctx.waitUntil(runRefresh(env, { reason: `${om[1]} connected for ${r.person}` }));
+      return back({ connected: om[1], person: r.person });
+    }
     if (url.pathname.startsWith("/api/")) {
       const res = await settingsApi(req, env, url);
       if (res) return res;

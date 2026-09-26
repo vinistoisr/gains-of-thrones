@@ -1,6 +1,6 @@
 // Weekly narrative written by Workers AI from numbers the pipeline computed.
 // The model explains; it never computes. Every figure it may use is in `facts`.
-import { mean, pstdev, fmtF, daysBetween, weekday } from "./util.js";
+import { mean, pstdev, fmtF, daysBetween, weekday, hasNight } from "./util.js";
 import { NEED_H, SET_MIN_RETURN, SET_HIGH_FROM, SET_VERY_HIGH_FROM, setStatus } from "./brief.js";
 import { fractionalSets } from "./muscles.js";
 import { CLAIMS } from "./claims.js";
@@ -11,7 +11,7 @@ const avg = (v, nd = 1) => { const w = v.filter((x) => x != null); return w.leng
 
 /** Compact, model-facing summary of the last week against the prior four. */
 export function weeklyFacts(days, brief, today) {
-  const nights = days.filter((d) => d.score != null);
+  const nights = days.filter(hasNight);
   const wk = nights.filter((n) => daysBetween(n.d, today) < 7);
   const prior = nights.filter((n) => { const a = daysBetween(n.d, today); return a >= 7 && a < 35; });
   const block = (v) => ({

@@ -5,7 +5,7 @@
 // in a few thousand characters and explain its own units and limits inline.
 // Everything here is already computed by the pipeline (mergeDays, computeBrief,
 // the weekly narrative); this module only selects and formats.
-import { daysBetween, fmtF, fmtComma0, fmtSigned, wdName, lblShort, localStamp, TZ } from "./util.js";
+import { daysBetween, fmtF, fmtComma0, fmtSigned, wdName, lblShort, localStamp, TZ, hasNight } from "./util.js";
 import { SET_FAILURE, SET_WARMUP, SET_RIR, SET_DROP } from "./summarize.js";
 import { muscleGroup } from "./muscles.js";
 
@@ -60,7 +60,7 @@ function sessionBlock(day, today, unit) {
 }
 
 function nightsTable(days, brief) {
-  const nights = days.filter((d) => d.score != null).slice(-NIGHTS);
+  const nights = days.filter(hasNight).slice(-NIGHTS);
   if (!nights.length) return "No ring nights recorded.";
   const rows = ["| night | asleep | score | recovery | HRV | RHR | bed | wake | deep | REM |", "|---|---|---|---|---|---|---|---|---|---|"];
   for (const n of nights) {

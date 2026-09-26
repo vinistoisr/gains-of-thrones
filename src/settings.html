@@ -47,6 +47,7 @@ a{color:var(--ink)}
 .chip.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
 .chip.no{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
 .prow .btn{margin-left:auto}
+.prow .btn + .btn{margin-left:0}
 form{display:grid;gap:12px;margin-top:14px}
 label{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--ink2)}
 label small{font-weight:400;color:var(--muted)}
@@ -64,6 +65,16 @@ details{margin-top:6px}
 summary{cursor:pointer;color:var(--muted);font-size:13px}
 details p{font-size:13px;color:var(--ink2);margin:6px 0}
 [hidden]{display:none!important}
+.banner{border-radius:14px;padding:12px 16px;margin:0 0 16px;font-size:14px;border:1px solid var(--border)}
+.banner.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.banner.err{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 45%,transparent)}
+.note{font-size:13px;color:var(--ink2);margin:0}
+.app summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none}
+.app summary::-webkit-details-marker{display:none}
+.steps{margin:12px 0 0;padding-left:20px;font-size:13px;color:var(--ink2)}
+.steps li{margin:3px 0}
+.copyrow{display:flex;gap:8px}
+.copyrow input{flex:1}
 </style>
 </head>
 <body>
@@ -73,12 +84,20 @@ details p{font-size:13px;color:var(--ink2);margin:6px 0}
   <a class="btn" href="/">Dashboard</a>
 </header>
 
+<p class="banner" id="banner" hidden></p>
+
 <section class="card" id="peoplecard">
   <h2>People</h2>
-  <p class="sub">Each person needs an Ultrahuman token. A workout log is optional.</p>
+  <p class="sub">Each person needs a source of sleep data: an Ultrahuman token, or an Oura or Google Health sign-in. A workout log is optional.</p>
   <div id="people"></div>
   <button class="btn primary" id="addbtn" type="button">Add a person</button>
   <div id="newform"></div>
+</section>
+
+<section class="card" id="appscard">
+  <h2>Sign-in apps</h2>
+  <p class="sub">Oura and Google Health only let apps read your data through a sign-in, so this dashboard needs its own free app registration with each one you use. You do this once; after that every person connects with a button.</p>
+  <div id="apps"></div>
 </section>
 
 <section class="card">
@@ -108,8 +127,11 @@ details p{font-size:13px;color:var(--ink2);margin:6px 0}
 <template id="formtpl">
   <form class="pform">
     <label>Name<input name="name" required maxlength="40" autocomplete="off"></label>
-    <label>Ultrahuman API token <small data-hint="ultrahuman">Generate it in the Ultrahuman developer portal (vision.ultrahuman.com).</small>
+    <label>Sleep data from
+      <select name="ring"><option value="ultrahuman">Ultrahuman Ring</option><option value="oura">Oura Ring</option><option value="google">Google Health (Fitbit, Pixel Watch)</option></select></label>
+    <label data-ring="ultrahuman">Ultrahuman API token <small data-hint="ultrahuman">Generate it in the Ultrahuman developer portal (vision.ultrahuman.com).</small>
       <input name="ultrahuman" type="password" autocomplete="off" spellcheck="false"></label>
+    <p class="note" data-ring="oauth"></p>
     <div class="two">
       <label>Workout log
         <select name="workouts"><option value="">None</option><option value="liftoff">Liftoff</option><option value="hevy">Hevy</option></select></label>
@@ -159,13 +181,25 @@ function renderPeople() {
     const row = document.createElement("div"); row.className = "prow";
     const n = document.createElement("span"); n.className = "pname"; n.textContent = p.name; row.appendChild(n);
     const chips = document.createElement("span"); chips.className = "chips";
-    chips.appendChild(p.has.ultrahuman ? chip("Ultrahuman connected", "ok") : chip("No Ultrahuman token", "no"));
+    const ring = p.ring || "ultrahuman";
+    if (ring === "ultrahuman") chips.appendChild(p.has.ultrahuman ? chip("Ultrahuman connected", "ok") : chip("No Ultrahuman token", "no"));
+    else {
+      const lab = S.apps[ring].label;
+      chips.appendChild(p.reconnect[ring] ? chip(lab + ": reconnect", "no") : p.has[ring] ? chip(lab + " connected", "ok") : chip(lab + " not connected", "no"));
+    }
     if (p.workouts) {
       const label = p.workouts === "hevy" ? "Hevy" : "Liftoff";
       chips.appendChild(p.has[p.workouts] ? chip(label + " connected", "ok") : chip(label + " not connected", "no"));
       chips.appendChild(chip(p.units));
     }
     row.appendChild(chips);
+    if (ring !== "ultrahuman" && (!p.has[ring] || p.reconnect[ring])) {
+      const c = document.createElement("a"); c.className = "btn primary"; c.style.marginLeft = "auto";
+      c.textContent = p.has[ring] ? "Reconnect" : "Connect " + S.apps[ring].label;
+      if (S.apps[ring].configured) c.href = "/oauth/" + ring + "/start?person=" + encodeURIComponent(p.id);
+      else { c.href = "#appscard"; c.title = "Register the " + S.apps[ring].label + " app below first"; }
+      row.appendChild(c);
+    }
     const edit = document.createElement("button"); edit.className = "btn"; edit.type = "button"; edit.textContent = "Edit";
     row.appendChild(edit);
     el.appendChild(row);
@@ -187,6 +221,20 @@ function openForm(slot, person) {
   const msg = $(".msg", f);
   const sel = f.elements.workouts;
   const units = f.elements.units;
+  const ringSel = f.elements.ring;
+  const syncRing = () => {
+    const r = ringSel.value;
+    $('[data-ring="ultrahuman"]', f).hidden = r !== "ultrahuman";
+    const note = $('[data-ring="oauth"]', f);
+    note.hidden = r === "ultrahuman";
+    if (r !== "ultrahuman") {
+      const a = S.apps[r];
+      note.textContent = (a.configured ? "" : "First register the " + a.label + " app in Sign-in apps below. ") +
+        "Save, then press Connect " + a.label + " next to this person to sign in." +
+        (r === "google" ? " Google Health has no sleep or recovery score, so those parts of the dashboard stay hidden for this person." : "");
+    }
+  };
+  ringSel.addEventListener("change", syncRing);
   let unitsTouched = !!person;
   units.addEventListener("change", () => { unitsTouched = true; });
   const sync = () => {
@@ -198,6 +246,7 @@ function openForm(slot, person) {
   sel.addEventListener("change", sync);
   if (person) {
     f.elements.name.value = person.name;
+    ringSel.value = person.ring || "ultrahuman";
     sel.value = person.workouts || "";
     units.value = person.units || "lb";
     if (person.has.ultrahuman) f.elements.ultrahuman.placeholder = "Saved. Leave blank to keep it.";
@@ -211,7 +260,7 @@ function openForm(slot, person) {
       S = r.data; renderAll();
     });
   }
-  sync();
+  sync(); syncRing();
   $('[data-act="cancel"]', f).addEventListener("click", () => { slot.textContent = ""; });
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -219,7 +268,7 @@ function openForm(slot, person) {
     btn.disabled = true; msg.className = "msg"; msg.textContent = "Checking with each service...";
     const b = {
       id: person ? person.id : undefined,
-      name: f.elements.name.value, workouts: sel.value || null, units: units.value,
+      name: f.elements.name.value, ring: ringSel.value, workouts: sel.value || null, units: units.value,
       ultrahuman: f.elements.ultrahuman.value, hevy: f.elements.hevy.value,
       liftoffEmail: f.elements.liftoffEmail.value, liftoffPassword: f.elements.liftoffPassword.value,
     };
@@ -264,7 +313,67 @@ function renderGeneral() {
   $("#signout").hidden = S.mode !== "password";
 }
 
-function renderAll() { renderPeople(); renderStatus(); renderGeneral(); }
+const APP_STEPS = {
+  oura: ["Open the Oura developer portal and create an application (free).", "Set its redirect URI to the address below, exactly.", "Copy the client ID and client secret into the fields here."],
+  google: ["In Google Cloud, create a project and enable the Google Health API.",
+    "Set up the OAuth consent screen as External, then set its publishing status to In production. Left in Testing, Google ends every sign-in after 7 days.",
+    "Create an OAuth client ID of type Web application with the redirect URI below, exactly.",
+    "Copy the client ID and client secret into the fields here.",
+    "When you connect, Google warns that the app is unverified: choose Advanced, then continue. An unverified app is limited to 100 people, which is plenty here."],
+};
+function renderApps() {
+  const box = $("#apps"); box.textContent = "";
+  for (const [id, a] of Object.entries(S.apps)) {
+    const el = document.createElement("details"); el.className = "person app";
+    el.open = !a.configured && S.people.some(p => p.ring === id);
+    const sum = document.createElement("summary");
+    const n = document.createElement("span"); n.className = "pname"; n.textContent = a.label; sum.appendChild(n);
+    sum.appendChild(a.configured ? chip("Registered", "ok") : chip("Not set up", ""));
+    el.appendChild(sum);
+    const ol = document.createElement("ol"); ol.className = "steps";
+    APP_STEPS[id].forEach((t, i) => {
+      const li = document.createElement("li"); li.textContent = t;
+      if (i === 0) { li.append(" "); const l = document.createElement("a"); l.href = a.help; l.target = "_blank"; l.rel = "noopener"; l.textContent = "Open"; li.appendChild(l); }
+      ol.appendChild(li);
+    });
+    el.appendChild(ol);
+    const f = document.createElement("form");
+    f.innerHTML = '<label>Redirect URI<div class="copyrow"><input readonly name="ru"><button class="btn" type="button">Copy</button></div></label>' +
+      '<div class="two"><label>Client ID<input name="clientId" autocomplete="off" spellcheck="false"></label>' +
+      '<label>Client secret<input name="clientSecret" type="password" autocomplete="off" spellcheck="false"></label></div>' +
+      '<div class="actions"><button class="btn primary" type="submit">Save</button><button class="btn danger" type="button" data-act="clear">Remove</button><span class="msg"></span></div>';
+    f.elements.ru.value = a.redirectUri;
+    f.elements.clientId.value = a.clientId || "";
+    if (a.configured) f.elements.clientSecret.placeholder = "Saved. Leave blank to keep it.";
+    $('[data-act="clear"]', f).hidden = !a.configured;
+    $(".copyrow button", f).addEventListener("click", (e) => { navigator.clipboard.writeText(a.redirectUri).then(() => { e.target.textContent = "Copied"; }); });
+    const msg = $(".msg", f);
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const r = await api("/api/apps", { method: "POST", body: JSON.stringify({ provider: id, clientId: f.elements.clientId.value, clientSecret: f.elements.clientSecret.value }) });
+      if (!r.ok) { msg.className = "msg err"; msg.textContent = r.error; return; }
+      S = r.data; renderAll();
+    });
+    $('[data-act="clear"]', f).addEventListener("click", async (e) => {
+      if (e.target.dataset.armed !== "1") { e.target.dataset.armed = "1"; e.target.textContent = "Click again to remove"; return; }
+      const r = await api("/api/apps", { method: "POST", body: JSON.stringify({ provider: id, clear: true }) });
+      if (r.ok) { S = r.data; renderAll(); }
+    });
+    el.appendChild(f);
+    box.appendChild(el);
+  }
+}
+
+function renderAll() { renderPeople(); renderApps(); renderStatus(); renderGeneral(); }
+
+// back from an OAuth sign-in (worker.js /oauth/<provider>/callback)
+(() => {
+  const q = new URLSearchParams(location.search);
+  const b = $("#banner");
+  if (q.get("connected")) { b.hidden = false; b.className = "banner ok"; b.textContent = "Connected. The first refresh is running; the dashboard updates in a minute or two."; }
+  else if (q.get("oauth_error")) { b.hidden = false; b.className = "banner err"; b.textContent = q.get("oauth_error"); }
+  if (q.toString()) history.replaceState(null, "", "/settings");
+})();
 
 async function startRefresh(text) {
   const btn = $("#refreshbtn"), msg = $("#refreshmsg");

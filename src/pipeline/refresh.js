@@ -3,7 +3,9 @@
 //
 // Bucket layout (per person id from the settings, config.js):
 //   data/<uid>/YYYY-MM-DD.json   raw Ultrahuman daily_metrics payload (kept for reprocessing)
-//   data/<uid>/ring.json         {date: ringRec} - summaries of every raw day
+//   data/<uid>/ring.json         {date: ringRec} - summaries of every raw Ultrahuman day
+//   data/<uid>/<src>/YYYY-MM-DD.json  raw per-day bundle from Oura or Google Health (rings.js)
+//   data/<uid>/ring-<src>.json   {date: ringRec} - summaries for that source
 //   data/<uid>/empty.json        {date: fetchedAtMs} - dates the API had no data for
 //   data/<uid>/workouts.json     workout log as Liftoff posts (post.getMyPosts, or Hevy converted by hevyToPosts)
 //   data/<uid>/liftoff-auth.json {accessToken, expiresAt} cached from the refresh token
@@ -20,6 +22,7 @@ import { renderPage } from "./render.js";
 import { coachMarkdown } from "./coach.js";
 import { fetchUltrahumanDay, hasRealData, liftoffPosts, LIFTOFF_DEFAULT_BASE, hevySync, hevyToPosts, postsInUnit } from "./sources.js";
 import { weeklyFacts, writeNarrative, narrativeDue } from "./ai.js";
+import { RING_ADAPTERS } from "./rings.js";
 import { todayLocal, localStamp, addDays, daysBetween, mondayOf, setTimeZone } from "./util.js";
 
 const LOOKBACK = 35;
@@ -70,21 +73,58 @@ async function setStatus(env, patch) {
   await putJSON(env, "status.json", { ...s, ...patch });
 }
 
-/** Recompute ring.json for one user from every raw day file in the bucket. */
-async function rebuildRing(env, uid, log) {
+/**
+ * Recompute one source's summaries from every raw day file in the bucket.
+ * Ultrahuman raw days sit directly in data/<uid>/, the other sources in
+ * data/<uid>/<src>/; toRec(raw, date) turns one raw day into a ring record.
+ */
+async function rebuildRing(env, uid, log, src = "ultrahuman", toRec = (raw) => ringRec(raw)) {
   const ring = {};
+  const prefix = src === "ultrahuman" ? `data/${uid}/` : `data/${uid}/${src}/`;
+  // direct children only: an Ultrahuman scan must not pick up data/<uid>/oura/<date>.json
+  const dayFile = src === "ultrahuman" ? /^data\/[^/]+\/(\d{4}-\d{2}-\d{2})\.json$/ : /^data\/[^/]+\/[a-z]+\/(\d{4}-\d{2}-\d{2})\.json$/;
   let cursor, n = 0;
   do {
-    const page = await env.BUCKET.list({ prefix: `data/${uid}/`, cursor });
+    const page = await env.BUCKET.list({ prefix, cursor });
     for (const o of page.objects) {
-      if (!/\/\d{4}-\d{2}-\d{2}\.json$/.test(o.key)) continue;
+      const m = dayFile.exec(o.key);
+      if (!m) continue;
       const raw = await getJSON(env, o.key);
-      const rec = raw && ringRec(raw);
+      const rec = raw && toRec(raw, m[1]);
       if (rec) { ring[rec.d] = rec; n++; }
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
-  log(`${uid}: rebuilt ring.json from ${n} raw days`);
+  log(`${uid}: rebuilt ${src} summaries from ${n} raw days`);
+  return ring;
+}
+
+const OAUTH_FIRST_DAYS = 60;    // history pulled on the first connect
+const OAUTH_RECENT_DAYS = 7;    // later refreshes re-read the last week (late syncs, edits)
+
+/**
+ * Oura or Google Health: one ranged fetch per refresh through the source's
+ * adapter (rings.js), raw days kept in data/<uid>/<src>/, summaries in
+ * ring-<src>.json. A failed sign-in becomes a warning on the settings page.
+ */
+async function refreshOAuthRing(env, u, secrets, today, full, out, log) {
+  const uid = u.id, src = u.ring, ad = RING_ADAPTERS[src];
+  const key = `data/${uid}/ring-${src}.json`;
+  const ring = full ? await rebuildRing(env, uid, log, src, ad.toRec) : (await getJSON(env, key)) || {};
+  const start = addDays(today, -(Object.keys(ring).length ? OAUTH_RECENT_DAYS : OAUTH_FIRST_DAYS));
+  try {
+    const raw = await ad.fetchDays(env, secrets, uid, start, today);
+    for (const [d, day] of Object.entries(raw)) {
+      const rec = ad.toRec(day, d);
+      if (!rec) continue;
+      await env.BUCKET.put(`data/${uid}/${src}/${d}.json`, JSON.stringify(day), { httpMetadata: { contentType: "application/json" } });
+      ring[d] = rec;
+      out.fetched++;
+    }
+  } catch (e) {
+    out.warnings.push(e.message);
+  }
+  await putJSON(env, key, ring);
   return ring;
 }
 
@@ -92,40 +132,10 @@ async function refreshUser(env, u, secrets, today, full, log) {
   const uid = u.id;
   const out = { uid, fetched: 0, workouts: null, warnings: [] };
 
-  // ---- ring
-  let ring = full ? await rebuildRing(env, uid, log) : (await getJSON(env, `data/${uid}/ring.json`)) || {};
-  if (!full && !Object.keys(ring).length) ring = await rebuildRing(env, uid, log);   // first run bootstrap
-  const empty = (await getJSON(env, `data/${uid}/empty.json`)) || {};
-  const token = credential(env, secrets, uid, "ultrahuman");
-  if (token) {
-    const wanted = [];
-    for (let i = 0; i < LOOKBACK; i++) {
-      const d = addDays(today, -i);
-      if (i <= 1) { wanted.push(d); continue; }                    // the two latest days can still change
-      if (ring[d]) continue;
-      if (empty[d] && daysBetween(d, today) > 3) continue;          // gave up on that date
-      wanted.push(d);
-    }
-    for (const d of wanted) {
-      try {
-        const raw = await fetchUltrahumanDay(d, token);
-        const metrics = (raw.data && raw.data.metrics) || {};
-        if (!hasRealData(metrics)) { empty[d] = Date.now(); continue; }
-        const rec = ringRec(raw);
-        if (!rec) { empty[d] = Date.now(); continue; }
-        await env.BUCKET.put(`data/${uid}/${d}.json`, JSON.stringify(raw), { httpMetadata: { contentType: "application/json" } });
-        ring[rec.d] = rec;
-        delete empty[rec.d];
-        out.fetched++;
-      } catch (e) {
-        out.warnings.push(`ultrahuman ${d}: ${e.message}`);
-      }
-    }
-    await putJSON(env, `data/${uid}/ring.json`, ring);
-    await putJSON(env, `data/${uid}/empty.json`, empty);
-  } else {
-    out.warnings.push("No Ultrahuman token yet.");
-  }
+  // ---- sleep and recovery: an Ultrahuman token, or an OAuth source (Oura, Google Health)
+  const ring = RING_ADAPTERS[u.ring]
+    ? await refreshOAuthRing(env, u, secrets, today, full, out, log)
+    : await refreshUltrahuman(env, uid, secrets, today, full, out, log);
 
   // ---- workout log: Liftoff or Hevy, stored as Liftoff-shaped posts either way
   let posts = null;
@@ -163,6 +173,44 @@ async function refreshUser(env, u, secrets, today, full, log) {
   const days = mergeDays(ring, loadWorkouts(postsInUnit(posts, u.units)), screentime);
   out.days = days.length;
   return { ...out, days_list: days };
+}
+
+/** Ultrahuman: one request per missing or recent day, raw days kept in data/<uid>/. */
+async function refreshUltrahuman(env, uid, secrets, today, full, out, log) {
+  let ring = full ? await rebuildRing(env, uid, log) : (await getJSON(env, `data/${uid}/ring.json`)) || {};
+  if (!full && !Object.keys(ring).length) ring = await rebuildRing(env, uid, log);   // first run bootstrap
+  const empty = (await getJSON(env, `data/${uid}/empty.json`)) || {};
+  const token = credential(env, secrets, uid, "ultrahuman");
+  if (token) {
+    const wanted = [];
+    for (let i = 0; i < LOOKBACK; i++) {
+      const d = addDays(today, -i);
+      if (i <= 1) { wanted.push(d); continue; }                    // the two latest days can still change
+      if (ring[d]) continue;
+      if (empty[d] && daysBetween(d, today) > 3) continue;          // gave up on that date
+      wanted.push(d);
+    }
+    for (const d of wanted) {
+      try {
+        const raw = await fetchUltrahumanDay(d, token);
+        const metrics = (raw.data && raw.data.metrics) || {};
+        if (!hasRealData(metrics)) { empty[d] = Date.now(); continue; }
+        const rec = ringRec(raw);
+        if (!rec) { empty[d] = Date.now(); continue; }
+        await env.BUCKET.put(`data/${uid}/${d}.json`, JSON.stringify(raw), { httpMetadata: { contentType: "application/json" } });
+        ring[rec.d] = rec;
+        delete empty[rec.d];
+        out.fetched++;
+      } catch (e) {
+        out.warnings.push(`ultrahuman ${d}: ${e.message}`);
+      }
+    }
+    await putJSON(env, `data/${uid}/ring.json`, ring);
+    await putJSON(env, `data/${uid}/empty.json`, empty);
+  } else {
+    out.warnings.push("No Ultrahuman token yet.");
+  }
+  return ring;
 }
 
 /**
