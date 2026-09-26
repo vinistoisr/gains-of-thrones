@@ -44,7 +44,7 @@ It is a personal project. The numbers come from consumer devices and the analysi
 
 <table><tr>
 <td width="32%"><img src="docs/phone.png" alt="The dashboard on a phone"></td>
-<td><img src="docs/settings.png" alt="The settings page: people, tokens, workout log, units and time zone"></td>
+<td><img src="docs/settings.png" alt="The settings page: people with their sleep source and workout log, and the Oura and Google Health sign-in apps"></td>
 </tr></table>
 
 ## What you need
@@ -62,27 +62,31 @@ It is a personal project. The numbers come from consumer devices and the analysi
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/vinistoisr/gains-of-thrones)
 
-1. Click **Deploy to Cloudflare**. Sign in to Cloudflare and connect GitHub when asked. Cloudflare copies this repository into your GitHub account, creates the storage bucket, and deploys the Worker.
+1. Click **Deploy to Cloudflare**. Sign in to Cloudflare and connect GitHub when asked. Cloudflare copies this repository into your GitHub account, creates the storage bucket, and deploys the Worker. The setup page lets you rename the repository, the Worker and the bucket; the defaults are fine.
 2. When it asks for **APP_PASSWORD**, choose a long password. It protects all of your data.
-3. Open the Worker's address. It looks like `https://gains-of-thrones.<your-subdomain>.workers.dev` and is shown at the end of the deploy.
+3. Open the Worker's address. It is shown at the end of the deploy and looks like `https://gains-of-thrones.<your-subdomain>.workers.dev` (with your Worker's name if you changed it).
 4. Sign in with the password. The settings page opens.
 5. Add yourself: a name, where your sleep data comes from and, if you want, Liftoff or Hevy. An Ultrahuman token and the workout log are checked with their service when you save, so a typo shows up right away. For Oura or Google Health, register the app first (below), then press Connect next to your name.
 6. The first refresh starts on its own. When it finishes, open the dashboard.
 
 After that it refreshes at 00:20, 06:20, 12:20 and 18:20 in the time zone set on the settings page. The **Refresh now** button runs one immediately.
 
-Updates: the Deploy button makes your copy a separate repository. To pull in later changes, sync your copy with this one on GitHub (Sync fork, or a pull request from upstream). Cloudflare redeploys it on each push.
+Updates: the Deploy button makes a separate copy of this repository in your GitHub account, not a fork, so GitHub has no Sync button for it. To pull in later changes, run this in a clone of your copy; Cloudflare redeploys on the push:
+
+```sh
+git remote add upstream https://github.com/vinistoisr/gains-of-thrones   # once
+git pull upstream main
+git push
+```
 
 ### Oura and Google Health
 
-Both only share data through a sign-in, so your dashboard needs its own app registration with each one. It is free and you do it once; the settings page walks through it under **Sign-in apps** and shows the redirect URI to copy.
-
-Open your dashboard's settings page first: the **Sign-in apps** section shows the exact redirect URI for your deployment, with a Copy button. You need it in both consoles.
+Both only share data through a sign-in, so your dashboard needs its own app registration with each one. It is free and you do it once. Open your dashboard's settings page first: the **Sign-in apps** section repeats these steps and shows the exact redirect URI for your deployment, with a Copy button. You need it in both consoles.
 
 **Oura** (about 5 minutes)
 1. Sign in at [My Applications](https://cloud.ouraring.com/oauth/applications) with your Oura account and create a new application.
 2. Fill in the name and the other required fields; for a personal dashboard your dashboard's address works as the website.
-3. Add the redirect URI from the settings page (it ends in `/oauth/oura/callback`). It must match exactly, including `https://`.
+3. Add the redirect URI from the settings page (it ends in `/oauth/oura/callback`), exactly as shown.
 4. Save, then copy the **client ID** and **client secret** into the Oura box on the settings page and press Save.
 5. Press **Connect Oura** next to each Oura person and approve the access. An unapproved Oura app works for up to 10 people.
 
@@ -90,13 +94,13 @@ Open your dashboard's settings page first: the **Sign-in apps** section shows th
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a new project (any name).
 2. Enable the API: open the [Google Health API page](https://console.cloud.google.com/apis/library/health.googleapis.com) with that project selected and press **Enable**.
 3. Open **Google Auth Platform** (search for it in the console). Under **Branding**, enter an app name and your email as the support contact.
-4. Under **Audience**, choose **External**, then press **Publish app** so the publishing status reads **In production**. Left in Testing, Google ends every sign-in after 7 days.
-5. Under **Data Access**, press **Add or remove scopes**, search for "Google Health API", tick the three read-only scopes for **sleep**, **health metrics and measurements**, and **activity and fitness**, then press **Update** and **Save**.
-6. Under **Clients**, create a client of type **Web application**, add the redirect URI from the settings page (it ends in `/oauth/google/callback`) under **Authorized redirect URIs**, and create it.
+4. Under **Data Access**, press **Add or remove scopes**, search for "Google Health API", tick the three read-only scopes for **sleep**, **health metrics and measurements**, and **activity and fitness**, then press **Update** and **Save**. Do this before publishing: scopes added to a published app can send it back for review.
+5. Under **Audience**, choose **External**, then press **Publish app** so the publishing status reads **In production**. Left in Testing, Google ends every sign-in after 7 days.
+6. Under **Clients**, create a client of type **Web application**, add the redirect URI from the settings page (it ends in `/oauth/google/callback`) under **Authorized redirect URIs**, exactly as shown, and create it.
 7. Copy the **client ID** and **client secret** into the Google Health box on the settings page and press Save.
-8. Press **Connect Google Health** next to each Google person. Google warns that the app is unverified, because you have not sent it to Google for review: choose **Advanced**, then **Go to (your app name)**, and allow access. An unverified app works for up to 100 people.
+8. Press **Connect Google Health** next to each Google Health person. Google warns that the app is unverified, because you have not sent it to Google for review: choose **Advanced**, then **Go to (your app name)**, and allow access. An unverified app works for up to 100 people.
 
-If you later move the dashboard to a custom domain, the redirect URI changes: add the new one in both consoles, then press Reconnect for each person.
+If you later move the dashboard to a custom domain, the redirect URI shown on the settings page changes. People already connected keep working. Add the new URI to the app in each console anyway (keep the old one too), or the next Connect or Reconnect will fail with a redirect mismatch.
 
 The tokens are stored in your bucket and refreshed automatically. If a sign-in is revoked or expires, the settings page shows **Reconnect** next to that person.
 
@@ -112,11 +116,11 @@ The settings page holds up to eight people, each with their own tokens. Everyone
 
 ## Your data
 
-- Everything is stored in an R2 bucket in your own Cloudflare account: raw daily ring data, workouts, the rendered page, and the tokens you enter on the settings page. Nothing is sent anywhere else except requests to Ultrahuman, Oura, Google, Liftoff or Hevy for your own data, and to Workers AI (also in your account) for the weekly note.
+- Everything is stored in an R2 bucket in your own Cloudflare account: raw daily ring data, workouts, the rendered page, and the tokens you enter on the settings page. Nothing is sent anywhere else except requests to Ultrahuman, Oura, Google, Liftoff or Hevy for your own data, and to Workers AI (also in your account) for the weekly note. If you turn on notifications, each push is encrypted for your device and delivered through your browser's push service (Apple, Google or Mozilla), which cannot read it.
 - Tokens are stored in the bucket and never sent back to the browser. The settings page only shows whether each one is connected.
 - Your Liftoff password is not stored.
 - Each person picks kg or lb on the settings page, and every chart, record, tooltip, coach note and push text uses it. Hevy data is stored in kg as logged and converted only when a person picks lb. Liftoff loads are read as logged in the chosen unit; an exercise with its own unit override in Liftoff is converted. Hevy RPE becomes reps in reserve (10 minus RPE).
-- Removing a person deletes their tokens. Their stored data stays in the bucket until you delete it in the Cloudflare dashboard (R2, `gains-of-thrones`, `data/<id>/`).
+- Removing a person deletes their tokens. Their stored data stays in the bucket until you delete it in the Cloudflare dashboard (R2, your dashboard's bucket, `data/<id>/`).
 
 ## Optional
 

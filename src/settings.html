@@ -313,20 +313,21 @@ function renderGeneral() {
   $("#signout").hidden = S.mode !== "password";
 }
 
+// [text, link?] per step; the link opens the page that step happens on
 const APP_STEPS = {
-  oura: ["Sign in to Oura's My Applications page and create an application (free).",
-    "Fill in the required fields; your dashboard's address works as the website.",
-    "Add the redirect URI below, exactly as shown.",
-    "Save, then copy the client ID and client secret into the fields here.",
-    "Press Connect Oura next to each Oura person. Up to 10 people per app until Oura approves it."],
-  google: ["In the Google Cloud console, create a new project.",
-    "Enable the Google Health API for that project (APIs & Services, Library, search Google Health API, Enable).",
-    "Open Google Auth Platform. Under Branding, enter an app name and your email.",
-    "Under Audience, choose External, then press Publish app so the status reads In production. Left in Testing, Google ends every sign-in after 7 days.",
-    "Under Data Access, add the three read-only Google Health API scopes: sleep, health metrics and measurements, activity and fitness.",
-    "Under Clients, create a Web application client with the redirect URI below under Authorized redirect URIs.",
-    "Copy the client ID and client secret into the fields here.",
-    "Press Connect Google Health next to each person. Google warns the app is unverified: choose Advanced, then go to your app. Up to 100 people."],
+  oura: [["Sign in to Oura's My Applications page and create an application (free).", "https://cloud.ouraring.com/oauth/applications"],
+    ["Fill in the required fields; your dashboard's address works as the website."],
+    ["Add the redirect URI below, exactly as shown."],
+    ["Save, then copy the client ID and client secret into the fields here."],
+    ["Press Connect Oura next to each Oura person. Up to 10 people per app until Oura approves it."]],
+  google: [["In the Google Cloud console, create a new project.", "https://console.cloud.google.com/projectcreate"],
+    ["With that project selected, enable the Google Health API.", "https://console.cloud.google.com/apis/library/health.googleapis.com"],
+    ["Open Google Auth Platform. Under Branding, enter an app name and your email.", "https://console.cloud.google.com/auth/branding"],
+    ["Under Data Access, add the three read-only Google Health API scopes: sleep, health metrics and measurements, activity and fitness. Do this before publishing.", "https://console.cloud.google.com/auth/scopes"],
+    ["Under Audience, choose External, then press Publish app so the status reads In production. Left in Testing, Google ends every sign-in after 7 days.", "https://console.cloud.google.com/auth/audience"],
+    ["Under Clients, create a Web application client with the redirect URI below under Authorized redirect URIs, exactly as shown.", "https://console.cloud.google.com/auth/clients"],
+    ["Copy the client ID and client secret into the fields here."],
+    ["Press Connect Google Health next to each Google Health person. Google warns the app is unverified: choose Advanced, then go to your app. Up to 100 people."]],
 };
 function renderApps() {
   const box = $("#apps"); box.textContent = "";
@@ -338,9 +339,9 @@ function renderApps() {
     sum.appendChild(a.configured ? chip("Registered", "ok") : chip("Not set up", ""));
     el.appendChild(sum);
     const ol = document.createElement("ol"); ol.className = "steps";
-    APP_STEPS[id].forEach((t, i) => {
+    APP_STEPS[id].forEach(([t, href]) => {
       const li = document.createElement("li"); li.textContent = t;
-      if (i === 0) { li.append(" "); const l = document.createElement("a"); l.href = a.help; l.target = "_blank"; l.rel = "noopener"; l.textContent = "Open"; li.appendChild(l); }
+      if (href) { li.append(" "); const l = document.createElement("a"); l.href = href; l.target = "_blank"; l.rel = "noopener"; l.textContent = "Open"; li.appendChild(l); }
       ol.appendChild(li);
     });
     el.appendChild(ol);
