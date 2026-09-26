@@ -39,11 +39,11 @@ export function setList(day, i) {
   }).join(", ");
 }
 
-function sessionBlock(day, today) {
+function sessionBlock(day, today, unit) {
   const parts = [];
   if (day.wdur) parts.push(`${num(day.wdur)} min`);
   if (day.wsets) parts.push(`${day.wsets} sets`);
-  if (day.wvol) parts.push(`${fmtComma0(day.wvol)} lb volume`);
+  if (day.wvol) parts.push(`${fmtComma0(day.wvol)} ${unit} volume`);
   if (day.wcardio) parts.push(`cardio ${num(day.wcardio)} min`);
   const lines = [`### ${dateLbl(day.d)} (${ago(day.d, today)}): ${parts.join(", ") || "logged, no sets"}`];
   (day.wex || []).forEach((e, i) => {
@@ -95,10 +95,10 @@ function weeksTable(t) {
   return rows.join("\n");
 }
 
-function trendLines(t) {
+function trendLines(t, unit) {
   const prog = t.progress || [];
   const by = (state) => prog.filter((p) => p.state === state);
-  const lift = (p) => `${p.lift} ${fmtSigned(p.slopePerWeek, 1)} lb/wk (e1RM ${num(p.e1Prev)} to ${num(p.e1Now)}, ${p.n} sessions)`;
+  const lift = (p) => `${p.lift} ${fmtSigned(p.slopePerWeek, 1)} ${unit}/wk (e1RM ${num(p.e1Prev)} to ${num(p.e1Now)}, ${p.n} sessions)`;
   const more = (arr) => (arr.length > TREND_MAX ? ` and ${arr.length - TREND_MAX} more` : "");
   const out = [];
   const up = by("stronger"), down = by("weaker"), flat = by("flat"), na = by("not enough sessions");
@@ -120,6 +120,7 @@ function trendLines(t) {
  */
 export function coachMarkdown({ user, days, brief, narrative, today, origin = "", now = Date.now() }) {
   const name = (user && user.name) || (user && user.id) || "User";
+  const unit = (user && user.units) || "lb";
   const t = brief && brief.training;
   const s = brief && brief.sleep;
   const out = [];
@@ -127,7 +128,7 @@ export function coachMarkdown({ user, days, brief, narrative, today, origin = ""
   const log = user && user.workouts === "hevy" ? "Hevy" : "Liftoff";
   const from = `${origin ? ` from ${origin.replace(/^https:\/\//, "")}` : ""} (Ultrahuman ring${user && user.workouts ? ` + ${log} workout log` : ""})`;
   out.push(`Generated ${localStamp(now).replace("T", " ").slice(0, 16)} ${TZ}${from}, data through ${today}. This file is rewritten after every refresh; if the stamp is more than a day old, say so before using the numbers.`);
-  out.push(`Units: loads in lb (Liftoff as logged; Hevy converted from kg); e1RM = Epley estimate from the best set; sets are listed as load x reps in logged order (w = warm-up, f = taken to failure, d = drop set, @n = logged reps in reserve); fractional sets count 1.0 for the prime mover and 0.5 for each assisting muscle. Muscle group in brackets is the pipeline's mapping of the exercise name.`);
+  out.push(`Units: loads in ${unit}${user && user.workouts === "hevy" && unit === "lb" ? " (converted from Hevy's kg)" : ""}; e1RM = Epley estimate from the best set; sets are listed as load x reps in logged order (w = warm-up, f = taken to failure, d = drop set, @n = logged reps in reserve); fractional sets count 1.0 for the prime mover and 0.5 for each assisting muscle. Muscle group in brackets is the pipeline's mapping of the exercise name.`);
   if (brief && brief.error) out.push(`\nThe daily brief failed this refresh (${brief.error}); the sessions and nights below are still current.`);
 
   // ---- where things stand
@@ -153,7 +154,7 @@ export function coachMarkdown({ user, days, brief, narrative, today, origin = ""
   // ---- sessions
   out.push(`\n## Sessions, last ${SESSION_DAYS} days`);
   const recent = lifts.filter((d) => daysBetween(d.d, today) < SESSION_DAYS).slice(-SESSION_MAX).reverse();
-  if (recent.length) for (const d of recent) out.push(sessionBlock(d, today));
+  if (recent.length) for (const d of recent) out.push(sessionBlock(d, today, unit));
   else out.push(lifts.length ? `No sessions in the last ${SESSION_DAYS} days; the last one was ${dateLbl(lifts[lifts.length - 1].d)}.` : "No sessions logged.");
 
   // ---- volume
@@ -163,7 +164,7 @@ export function coachMarkdown({ user, days, brief, narrative, today, origin = ""
     const wt = weeksTable(t);
     if (wt) { out.push("\nFractional sets by ISO week (Mon-Sun):"); out.push(wt); }
     out.push(`\n## Lift trends, last ${t.progDays} days (e1RM slope, 95% CI decides the state)`);
-    out.push(trendLines(t));
+    out.push(trendLines(t, unit));
   }
 
   // ---- recovery

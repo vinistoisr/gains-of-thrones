@@ -3,7 +3,7 @@
 // config/secrets.json and are never sent back: the page only learns which ones
 // exist (config.js peopleView).
 import {
-  loadSettings, saveSettings, loadSecrets, setSecret, dropSecrets, peopleView, slugFor, normPerson, WORKOUT_SOURCES,
+  loadSettings, saveSettings, loadSecrets, setSecret, dropSecrets, peopleView, slugFor, normPerson, WORKOUT_SOURCES, UNITS,
 } from "./config.js";
 import { fetchUltrahumanDay, liftoffSignIn, HEVY_BASE, LIFTOFF_DEFAULT_BASE } from "./pipeline/sources.js";
 import { validTimeZone, setTimeZone, todayLocal, addDays } from "./pipeline/util.js";
@@ -55,7 +55,7 @@ async function checkHevy(key) {
 }
 
 /**
- * Create or update one person. Body: {id?, name, workouts, ultrahuman?, hevy?,
+ * Create or update one person. Body: {id?, name, workouts, units?, ultrahuman?, hevy?,
  * liftoffEmail?, liftoffPassword?, clear?: ["ultrahuman"|"liftoff"|"hevy"]}.
  * A credential field left empty keeps what is stored. Each new credential is
  * tried against its service first, so a typo is reported here, not at 6 a.m.
@@ -86,7 +86,8 @@ async function savePerson(env, b) {
     }
   }
 
-  const person = normPerson({ id, name, workouts });
+  const units = UNITS.includes(b.units) ? b.units : undefined;
+  const person = normPerson({ id, name, workouts, units });
   if (idx >= 0) people[idx] = person; else people.push(person);
   await saveSettings(env, { ...settings, people });
   if (ultrahuman) await setSecret(env, id, "ultrahuman", ultrahuman);

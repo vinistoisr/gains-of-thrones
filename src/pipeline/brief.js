@@ -228,11 +228,11 @@ export function ringOutlier(nights, today) {
  * and that was already being logged before that window (so a new exercise's
  * second session does not count). Returns [tag, title, sentence] or null.
  */
-export function firstPrInDays(lifts, today) {
+export function firstPrInDays(lifts, today, unit = "lb") {
   const last = lifts[lifts.length - 1];
   if (!last || daysBetween(last.d, today) > 1) return null;
   const nameOf = (s) => s.replace(/ \S+x\S+$/, "");               // "Bench Press 95x12" -> "Bench Press"
-  const setOf = (s) => { const m = /(\S+)x(\S+)$/.exec(s); return m ? `${m[1]} lb x ${m[2]}` : null; };
+  const setOf = (s) => { const m = /(\S+)x(\S+)$/.exec(s); return m ? `${m[1]} ${unit} x ${m[2]}` : null; };
   const prior = lifts.filter((d) => d.d < last.d && daysBetween(d.d, last.d) <= PUSH_PR_DAYS);
   const had = new Set(prior.flatMap((d) => [...(d.wprNames || []).map(nameOf), ...(d.wrankNames || [])]));
   const cands = [...(last.wprNames || []).map((s) => [nameOf(s), setOf(s)]), ...(last.wrankNames || []).map((n) => [n, null])];
@@ -240,7 +240,7 @@ export function firstPrInDays(lifts, today) {
     if (had.has(n)) continue;
     if (!lifts.some((d) => daysBetween(d.d, last.d) > PUSH_PR_DAYS && (d.wex || []).some((x) => x.n === n))) continue;
     const e = (last.wex || []).find((x) => x.n === n);
-    const top = set || (e && e.mw ? `${e.mw} lb x ${e.mr}` : null);
+    const top = set || (e && e.mw ? `${e.mw} ${unit} x ${e.mr}` : null);
     return ["pr", `First PR on ${n} in ${PUSH_PR_DAYS}+ days`, `First PR on ${n} in ${PUSH_PR_DAYS}+ days${top ? `: ${top}.` : "."}`];
   }
   return null;
@@ -345,9 +345,9 @@ export function hrvState(n) {
  * training.planHistory lists the scored weeks; without one the plan is built
  * fresh and the history is empty.
  */
-export function computeBrief(days, today, planStore = null) {
+export function computeBrief(days, today, planStore = null, unit = "lb") {
   const nights = days.filter((d) => d.score != null);
-  const out = { generated: today, hasSleep: nights.length > 0 };
+  const out = { generated: today, hasSleep: nights.length > 0, unit };
   if (!nights.length) { out.push = {}; return out; }
   const last = nights[nights.length - 1];
   const base = nights.length > 8 ? nights.slice(-29, -1) : nights.slice(0, -1);
@@ -566,7 +566,7 @@ export function computeBrief(days, today, planStore = null) {
     actions.push(["ring", `Charge the ring tonight: ${sinceGapLbl} since it last missed a night, and it usually needs charging every ${fmtF(cadence, 0)} days or so.`]);
   }
   if (down && down >= Math.max(1, up)) {
-    actions.push(["training", `${down} lift(s) with a falling best e1RM over the last ${TREND_DAYS} days, ${up} rising. Progression has stalled - add a rep or 2.5 lb next session.`]);
+    actions.push(["training", `${down} lift(s) with a falling best e1RM over the last ${TREND_DAYS} days, ${up} rising. Progression has stalled - add a rep or ${unit === "kg" ? "1 kg" : "2.5 lb"} next session.`]);
   }
   out.actions = actions.slice(0, 3).map(([tag, text]) => ({ tag, text }));
 
@@ -593,7 +593,7 @@ export function computeBrief(days, today, planStore = null) {
       fired.push(["lift", "Lifting day", `${capFirst(lowest.group)}: ${n} ${n === 1 ? "set" : "sets"} this week counting assists. Add 3 sets today.`]);
     }
   }
-  const prFlag = firstPrInDays(lifts, today);
+  const prFlag = firstPrInDays(lifts, today, unit);
   if (prFlag) fired.push(prFlag);
   let morning = null;
   if (fired.length) {

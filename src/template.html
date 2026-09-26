@@ -727,8 +727,9 @@ function el(tag, attrs, parent){
 }
 function fmtH(h){ if (h == null) return "-"; const H = Math.floor(h); return H + "h " + String(Math.round((h - H) * 60)).padStart(2, "0") + "m"; }
 function fmtK(v){ return v >= 10000 ? (v / 1000).toFixed(1) + "K" : Math.round(v).toLocaleString(); }
-// Liftoff loads are logged in pounds and shown as logged (nothing converts); volume is shown in thousands of lb
-function fmtLb(v){ return v >= 10000 ? Math.round(v / 1000) + "k lb" : v >= 1000 ? (v / 1000).toFixed(1) + "k lb" : Math.round(v).toLocaleString() + " lb"; }
+// loads arrive in the viewed person's unit (settings: kg or lb; pipeline/sources.js postsInUnit)
+function UNIT(){ const id = CURUSER === "both" ? USERS[0].id : CURUSER; const u = USERS.find(x => x.id === id); return (u && u.u) || "lb"; }
+function fmtLb(v){ const u = UNIT(); return v >= 10000 ? Math.round(v / 1000) + "k " + u : v >= 1000 ? (v / 1000).toFixed(1) + "k " + u : Math.round(v).toLocaleString() + " " + u; }
 function mean(a){ a = a.filter(v => v != null); return a.length ? a.reduce((s, v) => s + v, 0) / a.length : null; }
 // calendar-day helpers on YYYY-MM-DD strings (no timezone games, same as pipeline/util.js)
 function dayMs(iso){ const [y, m, d] = iso.split("-").map(Number); return Date.UTC(y, m - 1, d); }
@@ -1617,7 +1618,7 @@ function chartHeatmap(days){
         const sr = svg.getBoundingClientRect(), cr = card.getBoundingClientRect();
         const s = sr.width / Wh;
         const rows = [{ value: String(d.score), name: "score" }, { value: fmtH(d.slh), name: "asleep" }];
-        if (d.wsets) rows.push({ value: "lifted", name: (d.wvol || 0).toLocaleString() + " lb" });
+        if (d.wsets) rows.push({ value: "lifted", name: (d.wvol || 0).toLocaleString() + " " + UNIT() });
         tip.show(rows, d.lbl + " (" + d.wd + ")", sr.left - cr.left + (x + cell / 2) * s, sr.top - cr.top + y * s);
       };
       r.addEventListener("pointerenter", show); r.addEventListener("focus", show);
@@ -1760,7 +1761,7 @@ function chartTopEx(days){
   card.textContent = "";
   const h3 = document.createElement("h3"); h3.textContent = "Top exercises by volume"; card.appendChild(h3);
   const sub = document.createElement("p"); sub.className = "sub";
-  sub.textContent = "Total weight x reps in the selected range, in lb."; card.appendChild(sub);
+  sub.textContent = "Total weight x reps in the selected range, in " + UNIT() + "."; card.appendChild(sub);
   const Wx = chartW(card), rowH = 30, left = Math.min(210, Math.round(Wx * 0.4)), right = 64, top0 = 6;
   const maxCh = Math.floor((left - 10) / 7), Hx = top0 + top.length * rowH + 8;
   const svg = el("svg", { viewBox: `0 0 ${Wx} ${Hx}`, role: "img", "aria-label": "Top exercises" }, null);
@@ -1776,14 +1777,14 @@ function chartTopEx(days){
     const r = el("rect", { x: left, y: yy + (rowH - 16) / 2, width: bw2, height: 16,
       rx: 4, fill: cs("--c-lift"), class: "bar bar-groww",
       style: "animation-delay:" + i * 35 + "ms", tabindex: 0,
-      "aria-label": name + ": " + a.v.toLocaleString() + " lb" }, svg);
+      "aria-label": name + ": " + a.v.toLocaleString() + " " + UNIT() }, svg);
     const vt = el("text", { x: left + bw2 + 8, y: yy + rowH / 2 + 4, class: "endlab",
       style: "font-size:12.5px;font-weight:600;fill:var(--ink)" }, svg);
     vt.textContent = fmtLb(a.v);
     const show = () => {
       const sr = svg.getBoundingClientRect(), cr = card.getBoundingClientRect();
       const s = sr.width / Wx;
-      tip.show([{ value: a.v.toLocaleString() + " lb", name: "volume" },
+      tip.show([{ value: a.v.toLocaleString() + " " + UNIT(), name: "volume" },
                 { value: a.s + " sets", name: "across " + a.days + " days" }],
         name, sr.left - cr.left + (left + bw2 / 2) * s, sr.top - cr.top + yy * s);
     };
@@ -1798,14 +1799,14 @@ function chartVolume(days){
   card.style.display = has ? "" : "none";
   if (!has) return;
   const plotH = 190;
-  const fr = frame(card, "Training volume", "Weight x reps per day, in lb. Dots mark PR days.", plotH);
+  const fr = frame(card, "Training volume", "Weight x reps per day, in " + UNIT() + ". Dots mark PR days.", plotH);
   const W = fr.W;
   const maxV = Math.max(...days.map(d => d.wvol || 0), 1000) * 1.15;
   const y = v => MT + plotH - (v / maxV) * plotH;
   const n = days.length, band = (W - ML - MR) / n;
   const x = i => ML + band * (i + 0.5);
   yAxis(fr.svg, niceTicks(0, maxV, 4), y, v => v >= 1000 ? (v / 1000) + "k" : v);
-  const ul = el("text", { x: ML - 8, y: MT - 4, "text-anchor": "end", class: "axis-t" }, fr.svg); ul.textContent = "lb";
+  const ul = el("text", { x: ML - 8, y: MT - 4, "text-anchor": "end", class: "axis-t" }, fr.svg); ul.textContent = UNIT();
   weekendWash(fr.svg, days, x, band, plotH);
   const bw = barW(band);
   days.forEach((d, i) => {
@@ -1819,9 +1820,9 @@ function chartVolume(days){
         stroke: cs("--surface"), "stroke-width": 2 }, fr.svg);
     const hit = el("rect", { x: x(i) - band / 2, y: MT, width: band, height: plotH,
       fill: "transparent", class: "bar", tabindex: 0,
-      "aria-label": d.lbl + ": " + (d.wvol || 0).toLocaleString() + " lb" }, fr.svg);
+      "aria-label": d.lbl + ": " + (d.wvol || 0).toLocaleString() + " " + UNIT() }, fr.svg);
     const show = () => {
-      const rows = [{ value: (d.wvol || 0).toLocaleString() + " lb", name: "volume",
+      const rows = [{ value: (d.wvol || 0).toLocaleString() + " " + UNIT(), name: "volume",
                       color: getComputedStyle(document.documentElement).getPropertyValue("--c-lift").trim() },
                     { value: d.wsets + " sets", name: d.wexn + " exercises" }];
       if (d.wdur) rows.push({ value: d.wdur + " min", name: "duration" });
@@ -1905,7 +1906,7 @@ function chartBodyweight(days){
   const has = vals.length >= 2 && Math.max(...vals) - Math.min(...vals) > 0.01;
   card.style.display = has ? "" : "none";
   if (!has) return;
-  lineCard("c-bw", "Bodyweight", "In lb, as logged with workouts.", days, "wbody", "--c-bw", "lb", null, "sparse");
+  lineCard("c-bw", "Bodyweight", "In " + UNIT() + ", as logged with workouts.", days, "wbody", "--c-bw", UNIT(), null, "sparse");
 }
 
 const LANES = [["aw", "Awake", "--muted"], ["re", "REM", "--st-rem"],
@@ -1995,9 +1996,9 @@ function chartLift(days){
   const pct = (latest - first) / first * 100;
   sub.textContent = mode === "load"
     ? "No formula. Sessions with no " + reps + "-rep set are left blank. " + pts.length + " of " + all.length +
-      " sessions · current " + latest + " lb · best " + best + " lb"
+      " sessions · current " + latest + " " + UNIT() + " · best " + best + " " + UNIT()
     : "Best-set estimated 1RM (Epley) per session · " + pts.length + " sessions · current " +
-      latest.toFixed(0) + " lb · best " + best.toFixed(0) + " lb · " + (pct >= 0 ? "+" : "") + pct.toFixed(0) + "% over this window";
+      latest.toFixed(0) + " " + UNIT() + " · best " + best.toFixed(0) + " " + UNIT() + " · " + (pct >= 0 ? "+" : "") + pct.toFixed(0) + "% over this window";
   card.appendChild(sub);
   const plotH = 190, H = plotH + MT + MB, W = chartW(card);
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": h3.textContent }, null);
@@ -2013,7 +2014,7 @@ function chartLift(days){
   const lo = Math.floor(Math.min(...vals) * 0.92 / 5) * 5, hi = Math.max(Math.ceil(Math.max(...vals) * 1.06 / 5) * 5, lo + 5);
   const y = v => MT + plotH - ((v - lo) / (hi - lo)) * plotH;
   const n = days.length, x = i => ML + (W - ML - MR) * (n === 1 ? 0.5 : i / (n - 1));
-  yAxis(svg, niceTicks(lo, hi, 4), y, v => v + " lb");
+  yAxis(svg, niceTicks(lo, hi, 4), y, v => v + " " + UNIT());
   xAxis(svg, days, x, MT + plotH);
   // the line breaks at sessions without a point (a gap, not a zero)
   const have = new Set(pts.map(p => p.i));
@@ -2034,18 +2035,18 @@ function chartLift(days){
       const rl = el("text", { x: x(p.i), y: y(p.v) - 9, "text-anchor": "middle", class: "replab" }, svg);
       rl.textContent = "×" + p.e.e1r;
     }
-    const label = mode === "load" ? p.v + " lb at " + reps + " reps"
-      : p.v + " lb est 1RM from " + p.e.e1r + " reps at " + p.e.e1w + " lb";
+    const label = mode === "load" ? p.v + " " + UNIT() + " at " + reps + " reps"
+      : p.v + " " + UNIT() + " est 1RM from " + p.e.e1r + " reps at " + p.e.e1w + " " + UNIT();
     const hit = el("circle", { cx: x(p.i), cy: y(p.v), r: 13, fill: "transparent", tabindex: 0,
       "aria-label": p.d.lbl + ": " + label }, svg);
     const show = () => {
       const [px, py] = pt(x(p.i), y(p.v));
       const col = getComputedStyle(document.documentElement).getPropertyValue("--c-lift").trim();
       const rows = mode === "load"
-        ? [{ value: p.v + " lb", name: "best load at " + reps + " reps", color: col }]
-        : [{ value: p.v.toFixed(0) + " lb", name: "est. 1RM", color: col },
-           { value: "", name: "estimated from " + (p.e.e1r || p.e.mr) + " reps at " + (p.e.e1w || p.e.mw) + " lb" }];
-      rows.push({ value: p.e.v.toLocaleString() + " lb", name: "volume · " + p.e.s + " sets" });
+        ? [{ value: p.v + " " + UNIT(), name: "best load at " + reps + " reps", color: col }]
+        : [{ value: p.v.toFixed(0) + " " + UNIT(), name: "est. 1RM", color: col },
+           { value: "", name: "estimated from " + (p.e.e1r || p.e.mr) + " reps at " + (p.e.e1w || p.e.mw) + " " + UNIT() }];
+      rows.push({ value: p.e.v.toLocaleString() + " " + UNIT(), name: "volume · " + p.e.s + " sets" });
       rows.push({ value: "effort: " + p.ef, name: effortDetail(p) });
       tip.show(rows, p.d.lbl + " (" + p.d.wd + ")", px, py);
     };
@@ -2053,7 +2054,7 @@ function chartLift(days){
     hit.addEventListener("pointerleave", tip.hide); hit.addEventListener("blur", tip.hide);
   });
   const t = el("text", { x: x(pts[pts.length - 1].i) + 10, y: y(latest) + 4, class: "endlab" }, svg);
-  t.textContent = (mode === "load" ? latest : latest.toFixed(0)) + " lb";
+  t.textContent = (mode === "load" ? latest : latest.toFixed(0)) + " " + UNIT();
   // effort counts cover every session in the window, whichever view is drawn
   const read = all.filter(p => p.ef !== "not computable").length;
   const nf = all.filter(p => p.ef === "near failure").length, capped = all.filter(p => p.ef === "capped").length;
@@ -2063,12 +2064,12 @@ function chartLift(days){
     : "Effort read from rep drop-off at a fixed load: no session here had 3 or more working sets at one load.");
 }
 
-// tooltip detail behind an effort state: "12 -> 8 reps at 60 lb", "3 x 10 at 60 lb" when capped
+// tooltip detail behind an effort state: "12 -> 8 reps at 60 kg", "3 x 10 at 60 kg" when capped (unit from UNIT())
 function effortDetail(p){
   const run = effortRun(p.d, p.k);
   if (!run || run.reps.length < 3) return "loads varied or under 3 working sets";
-  if (p.ef === "capped") return run.reps.length + " x " + run.reps[0] + " at " + run.load + " lb, rep target";
-  return run.reps[0] + " -> " + run.reps[run.reps.length - 1] + " reps at " + run.load + " lb";
+  if (p.ef === "capped") return run.reps.length + " x " + run.reps[0] + " at " + run.load + " " + UNIT() + ", rep target";
+  return run.reps[0] + " -> " + run.reps[run.reps.length - 1] + " reps at " + run.load + " " + UNIT();
 }
 
 /* =============== what goes with what (correlations) =============== */
@@ -2404,7 +2405,7 @@ function renderTable(win){
     ["deep", "Deep m"], ["rem", "REM m"], ["light", "Light m"], ["hrv", "HRV ms"], ["rhr", "RHR"],
     ["temp", "Temp dev"], ["steps", "Steps"], ["mov", "Move"], ["vo2", "VO2"],
     ["alert", "Inertia m"], ["bed", "Bed"], ["wake", "Wake"],
-    ["wvol", "Vol lb"], ["wpr", "PRs"], ["wbody", "BW lb"], ["pc", "PC min"]];
+    ["wvol", "Vol " + UNIT()], ["wpr", "PRs"], ["wbody", "BW " + UNIT()], ["pc", "PC min"]];
   const wrap = document.getElementById("tbl"); wrap.textContent = "";
   const tb = document.createElement("table");
   const tr = document.createElement("tr");
@@ -2913,7 +2914,7 @@ function renderBody3D(uid, b){
     for (const s of (d.wprNames || [])){
       const m = /^(.*?)\s+(\d+(?:\.\d+)?)x(\d+)$/.exec(s);
       const name = m ? m[1] : s;
-      recs.push({ d: d.d, name, detail: m ? m[2] + " lb \u00d7 " + m[3] : "", rank: ranked.has(name) });
+      recs.push({ d: d.d, name, detail: m ? m[2] + " " + UNIT() + " \u00d7 " + m[3] : "", rank: ranked.has(name) });
     }
   }
   recs.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
@@ -2943,7 +2944,9 @@ function renderBody3D(uid, b){
   }
   const f = document.createElement("div"); f.className = "o3f";
   const parts = [];
-  if (t.prs28 != null) parts.push(t.prs28 + " records in 28 days");
+  // Liftoff's own PR counter when the log has one; otherwise the records the pipeline detects
+  const rec28 = t.prs28 ? t.prs28 : t.records28;
+  if (rec28 != null) parts.push(rec28 + (rec28 === 1 ? " record" : " records") + " in 28 days");
   if (t.progUp) parts.push(t.progUp + " lifts trending stronger");
   f.textContent = parts.join(" \u00b7 ");
   if (parts.length) side.appendChild(f);

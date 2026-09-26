@@ -110,8 +110,13 @@ details p{font-size:13px;color:var(--ink2);margin:6px 0}
     <label>Name<input name="name" required maxlength="40" autocomplete="off"></label>
     <label>Ultrahuman API token <small data-hint="ultrahuman">Generate it in the Ultrahuman developer portal (vision.ultrahuman.com).</small>
       <input name="ultrahuman" type="password" autocomplete="off" spellcheck="false"></label>
-    <label>Workout log
-      <select name="workouts"><option value="">None</option><option value="liftoff">Liftoff</option><option value="hevy">Hevy</option></select></label>
+    <div class="two">
+      <label>Workout log
+        <select name="workouts"><option value="">None</option><option value="liftoff">Liftoff</option><option value="hevy">Hevy</option></select></label>
+      <label data-units>Weights in
+        <select name="units"><option value="kg">kg</option><option value="lb">lb</option></select>
+        <small>Liftoff: pick the unit you log in. Hevy logs in kg and is converted if you pick lb.</small></label>
+    </div>
     <div class="two" data-for="liftoff" hidden>
       <label>Liftoff email or username<input name="liftoffEmail" autocomplete="off"></label>
       <label>Liftoff password <small>used once to sign in; only the sign-in token is kept</small><input name="liftoffPassword" type="password" autocomplete="off"></label>
@@ -158,6 +163,7 @@ function renderPeople() {
     if (p.workouts) {
       const label = p.workouts === "hevy" ? "Hevy" : "Liftoff";
       chips.appendChild(p.has[p.workouts] ? chip(label + " connected", "ok") : chip(label + " not connected", "no"));
+      chips.appendChild(chip(p.units));
     }
     row.appendChild(chips);
     const edit = document.createElement("button"); edit.className = "btn"; edit.type = "button"; edit.textContent = "Edit";
@@ -180,11 +186,20 @@ function openForm(slot, person) {
   const f = $("#formtpl").content.firstElementChild.cloneNode(true);
   const msg = $(".msg", f);
   const sel = f.elements.workouts;
-  const sync = () => f.querySelectorAll("[data-for]").forEach(el => { el.hidden = el.dataset.for !== sel.value; });
+  const units = f.elements.units;
+  let unitsTouched = !!person;
+  units.addEventListener("change", () => { unitsTouched = true; });
+  const sync = () => {
+    f.querySelectorAll("[data-for]").forEach(el => { el.hidden = el.dataset.for !== sel.value; });
+    $("[data-units]", f).hidden = !sel.value;
+    // Hevy logs in kg; until someone picks, follow the log's own unit
+    if (!unitsTouched) units.value = sel.value === "hevy" ? "kg" : "lb";
+  };
   sel.addEventListener("change", sync);
   if (person) {
     f.elements.name.value = person.name;
     sel.value = person.workouts || "";
+    units.value = person.units || "lb";
     if (person.has.ultrahuman) f.elements.ultrahuman.placeholder = "Saved. Leave blank to keep it.";
     if (person.has.hevy) f.elements.hevy.placeholder = "Saved. Leave blank to keep it.";
     if (person.has.liftoff) f.elements.liftoffEmail.placeholder = "Signed in. Leave blank to keep it.";
@@ -204,7 +219,7 @@ function openForm(slot, person) {
     btn.disabled = true; msg.className = "msg"; msg.textContent = "Checking with each service...";
     const b = {
       id: person ? person.id : undefined,
-      name: f.elements.name.value, workouts: sel.value || null,
+      name: f.elements.name.value, workouts: sel.value || null, units: units.value,
       ultrahuman: f.elements.ultrahuman.value, hevy: f.elements.hevy.value,
       liftoffEmail: f.elements.liftoffEmail.value, liftoffPassword: f.elements.liftoffPassword.value,
     };

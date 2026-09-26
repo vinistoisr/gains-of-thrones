@@ -33,7 +33,7 @@ test("unverifiableNumbers: 0.05 tolerance, so 6.9 matches 6.92 and 16 matches 16
 });
 
 test("weeklyFacts: loads are stated in lb as logged in Liftoff, never kg", () => {
-  assert.equal(facts.training.load_unit, "lb, as logged in Liftoff");
+  assert.equal(facts.training.load_unit, "lb");
   for (const p of facts.training.top_progressions) assert.match(p, / lb over \d+ sessions /, p);
   assert.ok(!/\bkg\b/.test(JSON.stringify(facts)), "no kg anywhere in the facts sheet");
 });

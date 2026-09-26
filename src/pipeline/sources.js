@@ -100,7 +100,6 @@ export async function liftoffPosts(refreshToken, state, base = LIFTOFF_DEFAULT_B
 // ---------------------------------------------------------------- Hevy
 // https://api.hevyapp.com/docs - needs a Hevy Pro API key (hevy.com/settings?developer).
 export const HEVY_BASE = "https://api.hevyapp.com/v1";
-const KG_TO_LB = 2.20462;
 const HEVY_MAX_PAGES = 300;          // 10 workouts a page
 const HEVY_SET_TYPE = { normal: "normal", warmup: "warmup", failure: "failure", dropset: "drop" };
 
@@ -151,11 +150,10 @@ export async function hevySync(apiKey, state) {
   return { syncedAt: started, workouts: await hevyAll(apiKey) };
 }
 
-const round1 = (x) => Math.round(x * 10) / 10;
-
 /**
  * Hevy workouts -> the Liftoff post shape summarize.js reads, so every analysis
- * works on either log. Loads become pounds (the page shows lb), RPE becomes
+ * works on either log. Loads stay in kilograms as logged and the post says so
+ * (loadUnit "kg"; postsInUnit converts when the person reads lb). RPE becomes
  * reps in reserve (10 - RPE), weight-and-reps sets are "WR", timed or distance
  * sets are "DD" (inputOne metres, inputTwo seconds). Liftoff-only counters
  * (streak, XP, rank-ups, its PR count) are absent, so those tiles stay hidden.
@@ -175,7 +173,7 @@ export function hevyToPosts(workouts) {
         setsData: sets.map((s) => {
           const out = { setType: HEVY_SET_TYPE[s.type] || "normal" };
           if (lifting) {
-            out.inputOne = s.weight_kg != null ? round1(s.weight_kg * KG_TO_LB) : 0;
+            out.inputOne = s.weight_kg != null ? Number(s.weight_kg) : 0;
             out.inputTwo = s.reps != null ? s.reps : 0;
           } else {
             out.inputOne = s.distance_meters || 0;
@@ -186,7 +184,38 @@ export function hevyToPosts(workouts) {
         }),
       });
     }
-    posts.push({ id: w.id, startedAt: w.start_time, sessionDuration: secs ? String(secs) : null, sessionPresetId: w.routine_id || null, exerciseData });
+    posts.push({ id: w.id, loadUnit: "kg", startedAt: w.start_time, sessionDuration: secs ? String(secs) : null, sessionPresetId: w.routine_id || null, exerciseData });
   }
   return posts.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+}
+
+// ---------------------------------------------------------------- load units
+export const KG_PER_LB = 0.45359237;
+const unitOf = (v) => (/^kg|kilo/i.test(String(v || "")) ? "kg" : /^lb|pound/i.test(String(v || "")) ? "lb" : null);
+
+/**
+ * Posts with every load (WR set inputOne, bodyweight) in `unit`. A post's own
+ * loadUnit (Hevy: "kg") says what it was logged in; a Liftoff post has none and
+ * is taken as logged in the person's unit, except an exercise whose
+ * overrideWeightUnit names the other unit. Converted loads keep 0.1 precision.
+ */
+export function postsInUnit(posts, unit) {
+  const target = unit === "kg" ? "kg" : "lb";
+  const conv = (v, from) => {
+    const n = Number(v);
+    if (!n || from === target || Number.isNaN(n)) return v;
+    return Math.round((from === "kg" ? n / KG_PER_LB : n * KG_PER_LB) * 10) / 10;
+  };
+  return (posts || []).map((p) => {
+    const postUnit = unitOf(p.loadUnit) || target;
+    let changed = false;
+    const exerciseData = (p.exerciseData || []).map((ex) => {
+      const from = unitOf(ex.overrideWeightUnit) || postUnit;
+      if (from === target || ex.exerciseTypes !== "WR") return ex;
+      changed = true;
+      return { ...ex, setsData: (ex.setsData || []).map((st) => ({ ...st, inputOne: conv(st.inputOne, from) })) };
+    });
+    const bw = postUnit !== target && p.bodyweight ? String(conv(parseFloat(p.bodyweight), postUnit)) : p.bodyweight;
+    return changed || bw !== p.bodyweight ? { ...p, exerciseData, bodyweight: bw } : p;
+  });
 }

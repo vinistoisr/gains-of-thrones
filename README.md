@@ -5,7 +5,11 @@ A private dashboard for sleep, recovery and strength training. It combines an
 Ultrahuman Ring with a workout log from Liftoff or Hevy, runs entirely in your
 own Cloudflare account, and refreshes itself every 6 hours.
 
+<p align="center"><img src="docs/spin.gif" width="640" alt="Hard sets per muscle for the last 7 days, painted on a rotating 3D body"></p>
+
 ![The dashboard with synthetic demo data](docs/screenshot.png)
+
+All screenshots use synthetic demo data. More are [below](#screenshots).
 
 What it shows:
 
@@ -16,6 +20,31 @@ What it shows:
 - A plan bar with a bedtime target and the week's lifting gaps, an optional 07:00 push notification and bedtime nudge, and a short weekly note written by Workers AI from the computed numbers.
 
 It is a personal project. The numbers come from consumer devices and the analysis is descriptive. It is not medical advice.
+
+## Screenshots
+
+**Tonight, recovery and the training week**
+
+![Bedtime plan, recovery score and the last 7 days of training](docs/today.png)
+
+**30-day averages and sleep**
+
+![Averages with trends, sleep score by weekday, sleep window, stages and grogginess](docs/tiles.png)
+
+**Training** (weights in kg or lb, set per person)
+
+![Training volume, sets per muscle by week, top exercises and a lift progression chart](docs/training.png)
+
+**Correlations**, with the statistics shown and weak results greyed out
+
+![Correlation cards between sleep, HRV, steps and training](docs/correlations.png)
+
+**Phone and settings**
+
+<table><tr>
+<td width="32%"><img src="docs/phone.png" alt="The dashboard on a phone"></td>
+<td><img src="docs/settings.png" alt="The settings page: people, tokens, workout log, units and time zone"></td>
+</tr></table>
 
 ## What you need
 
@@ -53,7 +82,7 @@ The settings page holds up to eight people, each with their own tokens. Everyone
 - Everything is stored in an R2 bucket in your own Cloudflare account: raw daily ring data, workouts, the rendered page, and the tokens you enter on the settings page. Nothing is sent anywhere else except requests to Ultrahuman, Liftoff or Hevy for your own data, and to Workers AI (also in your account) for the weekly note.
 - Tokens are stored in the bucket and never sent back to the browser. The settings page only shows whether each one is connected.
 - Your Liftoff password is not stored.
-- Hevy logs weights in kg. They are converted to pounds, because the whole page is in pounds. RPE becomes reps in reserve (10 minus RPE).
+- Each person picks kg or lb on the settings page, and every chart, record, tooltip, coach note and push text uses it. Hevy data is stored in kg as logged and converted only when a person picks lb. Liftoff loads are read as logged in the chosen unit; an exercise with its own unit override in Liftoff is converted. Hevy RPE becomes reps in reserve (10 minus RPE).
 - Removing a person deletes their tokens. Their stored data stays in the bucket until you delete it in the Cloudflare dashboard (R2, `gains-of-thrones`, `data/<id>/`).
 
 ## Optional

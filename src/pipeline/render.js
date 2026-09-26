@@ -19,14 +19,14 @@ export function renderPage({ users, datasets, briefs, narratives, today, vapidPu
   users.forEach((u, i) => {
     const days = datasets[u.id];
     if (!days || !days.length) { pending.push({ id: u.id, name: u.name }); return; }
-    const insights = buildInsights(days.slice(-35), today);
+    const insights = buildInsights(days.slice(-35), today, u.units || "lb");
     blocks.push(insightsBlock(u.id, insights));
     // the hypnogram is only rendered for the latest scored night - strip the rest
     const lastScored = [...days].reverse().find((d) => d.score != null)?.d;
     embedded[u.id] = days.map((d) => (d.d === lastScored || !d.hyp ? d : (({ hyp, ...rest }) => rest)(d)));
     anyLift = anyLift || days.some((d) => "trained" in d);
     const [light, dark] = USER_PALETTE[i % USER_PALETTE.length];
-    meta.push({ id: u.id, name: u.name, c: light, cd: dark });
+    meta.push({ id: u.id, name: u.name, c: light, cd: dark, u: u.units || "lb" });
   });
   if (!meta.length) throw new Error("no user data to render");
   const p = localParts(now);

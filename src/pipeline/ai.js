@@ -64,8 +64,8 @@ export function weeklyFacts(days, brief, today) {
       lifts_flat_90_day_trend: brief?.training?.progFlat ?? null,
       lifts_with_under_6_sessions: brief?.training?.progNA ?? null,
       top_progressions: (brief?.training?.progress || []).filter((p) => p.state !== "not enough sessions").slice(0, 4)
-        .map((p) => `${p.lift}: ${p.state}, e1RM ${p.e1Prev} -> ${p.e1Now} lb over ${p.n} sessions (${p.pct > 0 ? "+" : ""}${p.pct}%)`),
-      load_unit: "lb, as logged in Liftoff",
+        .map((p) => `${p.lift}: ${p.state}, e1RM ${p.e1Prev} -> ${p.e1Now} ${brief?.unit || "lb"} over ${p.n} sessions (${p.pct > 0 ? "+" : ""}${p.pct}%)`),
+      load_unit: brief?.unit || "lb",
       most_return_per_set_fractional_sets_per_muscle_per_week: `${SET_MIN_RETURN}-${SET_HIGH_FROM - 1}`,
     },
     evening_pc_minutes_this_week_avg: eve.length ? Math.round(mean(eve)) : null,

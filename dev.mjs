@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadWorkouts, mergeDays } from "./src/pipeline/summarize.js";
+import { postsInUnit } from "./src/pipeline/sources.js";
 import { computeBrief } from "./src/pipeline/brief.js";
 import { renderPage } from "./src/pipeline/render.js";
 import { coachMarkdown } from "./src/pipeline/coach.js";
@@ -18,7 +19,7 @@ import { coachMarkdown } from "./src/pipeline/coach.js";
 const here = import.meta.dirname;
 const readJSON = (p, fallback) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8").replace(/^﻿/, "")) : fallback);
 const users = readJSON(join(here, ".dev-data", "users.json"), [{ id: "demo", name: "Demo", workouts: "liftoff" }])
-  .map((u) => ({ ...u, workouts: u.workouts || (u.liftoff ? "liftoff" : null) }));
+  .map((u) => ({ ...u, workouts: u.workouts || (u.liftoff ? "liftoff" : null), units: u.units || (u.workouts === "hevy" ? "kg" : "lb") }));
 
 const inputs = {};   // uid -> {ring, workouts, screentime, narrative}
 for (const u of users) {
@@ -42,10 +43,11 @@ const today = Object.values(inputs).flatMap((x) => Object.keys(x.ring)).sort().p
 const planStore = readJSON(join(here, ".dev-data", "state", "plan.json"), null);
 const datasets = {}, briefs = {}, narratives = {};
 for (const [uid, x] of Object.entries(inputs)) {
-  const days = mergeDays(x.ring, loadWorkouts(x.workouts), x.screentime);
+  const unit = (users.find((u) => u.id === uid) || {}).units || "lb";
+  const days = mergeDays(x.ring, loadWorkouts(postsInUnit(x.workouts, unit)), x.screentime);
   if (!days.length) continue;
   datasets[uid] = days;
-  briefs[uid] = computeBrief(days, today, uid === users.find((u) => u.workouts)?.id ? planStore : null);
+  briefs[uid] = computeBrief(days, today, uid === users.find((u) => u.workouts)?.id ? planStore : null, unit);
   if (x.narrative && x.narrative.current) narratives[uid] = x.narrative.current;
 }
 const { html } = renderPage({ users, datasets, briefs, narratives, today, vapidPublic: "" });

@@ -6,7 +6,7 @@ function fmtH(hours) {
   return `${h}h ${String(Math.round((hours - h) * 60)).padStart(2, "0")}m`;
 }
 
-export function buildInsights(days, today) {
+export function buildInsights(days, today, unit = "lb") {
   const slept = days.filter((x) => x.score != null);
   const out = [];
   if (!slept.length) return out;
@@ -89,7 +89,7 @@ export function buildInsights(days, today) {
     const perWk = trained.length / weeks;
     const vol = trained.reduce((a, x) => a + (x.wvol || 0), 0);
     const prs = trained.reduce((a, x) => a + (x.wpr || 0), 0);
-    let body = `${trained.length} lifting sessions in ${days.length} days (${fmtF(perWk, 1)}/week), ${fmtComma0(vol)} lb of total volume`;
+    let body = `${trained.length} lifting sessions in ${days.length} days (${fmtF(perWk, 1)}/week), ${fmtComma0(vol)} ${unit} of total volume`;
     body += prs ? ` and ${prs} PRs. ` : ". ";
     const wdCounts = {};
     for (const x of trained) wdCounts[x.wd] = (wdCounts[x.wd] || 0) + 1;

@@ -166,30 +166,25 @@ test("renderPage: the lift chart reads effort from rep drop-off and DAYS carry w
   assert.ok(page.includes('"effortSummary":'), "effort summary embedded in the brief");
   assert.ok(page.includes('"Effort read from rep drop-off at a fixed load: " + nf + " of " + read + " sessions near failure, " + capped + " capped at a rep target."'), "chart line");
   assert.ok(page.includes('value: "effort: " + p.ef'), "effort state in the session tooltip");
-  assert.ok(page.includes('" -> " + run.reps[run.reps.length - 1] + " reps at " + run.load + " lb"'), "tooltip detail");
+  assert.ok(page.includes('" -> " + run.reps[run.reps.length - 1] + " reps at " + run.load + " " + UNIT()'), "tooltip detail");
   assert.ok(!page.includes(String.fromCharCode(0x2014)), "no em dash anywhere in the page");
 });
 
-test("renderPage: loads, e1RM and volume are labelled lb, never kg", () => {
+test("renderPage: every load label comes from the person's unit, none is hardcoded", () => {
   const page = html.replace(/data:font\/woff2;base64,[A-Za-z0-9+/=]+/g, "");
-  // no load, e1RM or volume number carries a kg label anywhere in the page (skin temp keeps its °C)
-  assert.deepEqual(page.match(/\d\s?kg\b/g), null, "a number labelled kg");
-  assert.deepEqual(page.match(/"\s?kg\b/g), null, 'a " kg" label string in the page code');
-  assert.deepEqual(page.match(/\(kg\)/g), null, "a (kg) unit in a caption");
+  const script = page.slice(page.indexOf("<script"));
+  // no load, e1RM or volume label is a fixed "lb" or "kg" in the page code
+  assert.deepEqual(script.match(/"[^"\n]*\s(lb|kg)\b[^"\n]*"/g)?.filter((x) => !/settings: kg or lb|className|t\.label|at 60 kg/.test(x)) || [], [], "a fixed unit in a string");
   assert.deepEqual(page.match(/toFixed\(1\) \+ "t"/g), null, "volume formatted as tonnes");
-  // the lb labels that replace them
-  assert.ok(page.includes('yAxis(svg, niceTicks(lo, hi, 4), y, v => v + " lb");'), "lift chart axis in lb");
-  assert.ok(page.includes('" sessions · current " + latest + " lb · best " + best + " lb"'), "load view subtitle in lb");
-  assert.ok(page.includes('latest.toFixed(0) + " lb · best " + best.toFixed(0) + " lb · "'), "e1RM view subtitle in lb");
-  assert.ok(page.includes('{ value: p.v.toFixed(0) + " lb", name: "est. 1RM", color: col }'), "e1RM tooltip in lb");
-  assert.ok(page.includes('"Weight x reps per day, in lb. Dots mark PR days."'), "volume chart caption");
-  assert.ok(page.includes('v => v >= 1000 ? (v / 1000) + "k" : v'), "volume axis ticks like 20k");
-  assert.ok(page.includes('ul.textContent = "lb"'), "volume axis labelled lb");
-  assert.ok(page.includes('function fmtLb(v){ return v >= 10000 ? Math.round(v / 1000) + "k lb"'), "volume totals like 117k lb");
-  assert.ok(page.includes('"Total weight x reps in the selected range, in lb."'), "top exercises caption");
-  assert.ok(page.includes('vt.textContent = fmtLb(a.v);'), "top exercises end label uses fmtLb, not tonnes");
-  assert.ok(page.includes('"In lb, as logged with workouts.", days, "wbody", "--c-bw", "lb"'), "bodyweight chart in lb");
-  assert.ok(page.includes('["wvol", "Vol lb"]') && page.includes('["wbody", "BW lb"]'), "table headers in lb");
+  assert.ok(page.includes('function UNIT(){'), "UNIT() reads the viewed person's unit");
+  assert.ok(page.includes('yAxis(svg, niceTicks(lo, hi, 4), y, v => v + " " + UNIT());'), "lift chart axis");
+  assert.ok(page.includes('ul.textContent = UNIT();'), "volume axis label");
+  assert.ok(page.includes('"--c-bw", UNIT(), null'), "bodyweight chart");
+  assert.ok(page.includes('["wvol", "Vol " + UNIT()]') && page.includes('["wbody", "BW " + UNIT()]'), "table headers");
+  assert.equal(meta[0].u, "lb", "an lb person by default");
+  const kg = renderPage({ users: [{ id: "k", name: "K", workouts: "hevy", units: "kg" }], datasets: { k: days }, briefs: { k: brief }, narratives: {}, today });
+  assert.equal(kg.meta[0].u, "kg");
+  assert.ok(kg.html.includes('"u":"kg"'), "the unit reaches the page data");
   assert.ok(!page.includes(String.fromCharCode(0x2014)), "no em dash");
 });
 

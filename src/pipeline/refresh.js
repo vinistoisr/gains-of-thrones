@@ -18,7 +18,7 @@ import { ringRec, loadWorkouts, mergeDays } from "./summarize.js";
 import { computeBrief, evaluatePlan } from "./brief.js";
 import { renderPage } from "./render.js";
 import { coachMarkdown } from "./coach.js";
-import { fetchUltrahumanDay, hasRealData, liftoffPosts, LIFTOFF_DEFAULT_BASE, hevySync, hevyToPosts } from "./sources.js";
+import { fetchUltrahumanDay, hasRealData, liftoffPosts, LIFTOFF_DEFAULT_BASE, hevySync, hevyToPosts, postsInUnit } from "./sources.js";
 import { weeklyFacts, writeNarrative, narrativeDue } from "./ai.js";
 import { todayLocal, localStamp, addDays, daysBetween, mondayOf, setTimeZone } from "./util.js";
 
@@ -35,7 +35,7 @@ export const planKey = (people, uid) => (people.find((x) => x.workouts) || {}).i
  * plan stands and only its sentence is recomputed. Returns the brief.
  */
 async function briefWithPlan(env, u, days, today, people) {
-  if (!u.workouts) return computeBrief(days, today);
+  if (!u.workouts) return computeBrief(days, today, null, u.units);
   const key = planKey(people, u.id);
   const store = (await getJSON(env, key)) || { weeks: [] };
   if (!Array.isArray(store.weeks)) store.weeks = [];
@@ -46,7 +46,7 @@ async function briefWithPlan(env, u, days, today, people) {
     Object.assign(w, evaluatePlan(w, days));
     changed = true;
   }
-  const brief = computeBrief(days, today, store);
+  const brief = computeBrief(days, today, store, u.units);
   const plan = brief.training && brief.training.plan;
   if (plan && !store.weeks.some((w) => w.weekStart === plan.weekStart)) {
     const { sentence, state, done, ...fixed } = plan;
@@ -159,7 +159,8 @@ async function refreshUser(env, u, secrets, today, full, log) {
   if (posts === null) posts = (await getJSON(env, `data/${uid}/workouts.json`)) || [];
 
   const screentime = (await getJSON(env, `data/${uid}/screentime.json`)) || {};
-  const days = mergeDays(ring, loadWorkouts(posts), screentime);
+  // every load in the person's unit (Hevy posts are kg, Liftoff as logged; sources.js postsInUnit)
+  const days = mergeDays(ring, loadWorkouts(postsInUnit(posts, u.units)), screentime);
   out.days = days.length;
   return { ...out, days_list: days };
 }

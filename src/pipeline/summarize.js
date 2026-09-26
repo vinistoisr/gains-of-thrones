@@ -50,11 +50,11 @@ export function parseDurationMin(s) {
  *   wprNames   records we detect ourselves: heavier top weight or higher e1RM than
  *              anything before in that exercise, e.g. "Bench Press 95x12"
  *   wsr        every WR set of the day, in the order the posts list them (the same
- *              order wex is built in): [exerciseIndex, weightLb, reps, flags(, rir)]
+ *              order wex is built in): [exerciseIndex, load, reps, flags(, rir)]
  *              where exerciseIndex is the position in that day's wex array (wnames
  *              is a truncated string on the page, so it cannot be indexed), weight
- *              is Liftoff's number as-is, in lb (the page labels it lb, nothing converts)
- *              rounded to 0.5, reps an integer, flags a SET_* bitmask and rir the
+ *              in the person's unit (refresh.js runs postsInUnit first; the page labels it)
+ *              rounded to 0.25 (keeps 1.25 kg plates), reps an integer, flags a SET_* bitmask and rir the
  *              logged value only when SET_RIR is set. Sets with no weight and no
  *              reps are skipped. Absent (not []) on days without a WR set.
  *   wmus       {group: fractional sets} for lifting days: each set counts 1.0 for the
@@ -123,7 +123,7 @@ export const EFFORT_STATES = ["near failure", "moderate", "easy", "capped", "not
 /**
  * Effort of one exercise-session read from rep drop-off at a fixed load, since
  * RIR is almost never logged. sets: the working (non warm-up) sets in logged
- * order as [lb, reps]. The load with the most sets is taken (ties go to the
+ * order as [load, reps]. The load with the most sets is taken (ties go to the
  * heavier one); with fewer than EFFORT_MIN_SETS sets at it the state is "not
  * computable". Over that run, dropoff = reps(last) / reps(first):
  *   "capped"        every set hit the same rep count: a prescribed target, so
@@ -205,7 +205,7 @@ export function loadWorkouts(posts) {
             else if (s.setType === "warmup") flags |= SET_WARMUP;
             else if (s.setType === "drop") flags |= SET_DROP;
             const rir = s.rir == null || s.rir === "" ? null : Number(s.rir);
-            const tuple = [ent.i, Math.round(one * 2) / 2, Math.round(two), flags];
+            const tuple = [ent.i, Math.round(one * 4) / 4, Math.round(two), flags];
             if (rir !== null && !Number.isNaN(rir)) { tuple[3] |= SET_RIR; tuple.push(rir); }
             rec.wsr.push(tuple);
           }

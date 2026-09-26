@@ -101,7 +101,7 @@ test("loadWorkouts: wsr flags follow the fixture's setType and rir", () => {
   assert.ok(fails > 0);
 });
 
-test("loadWorkouts: wsr rounds weight to 0.5 and reps to an integer, skips empty sets, absent without WR sets", () => {
+test("loadWorkouts: wsr rounds weight to 0.25 and reps to an integer, skips empty sets, absent without WR sets", () => {
   const p = fixture.workouts[0];
   const ex = p.exerciseData[0];
   const sets = [
@@ -111,7 +111,7 @@ test("loadWorkouts: wsr rounds weight to 0.5 and reps to an integer, skips empty
   ];
   const one = loadWorkouts([{ ...p, exerciseData: [{ ...ex, setsData: sets }] }])["2026-05-30"];
   assert.equal(one.wsets, 3);
-  assert.deepEqual(one.wsr, [[0, 61.5, 10, 0], [0, 0, 12, SET_RIR, 1]]);
+  assert.deepEqual(one.wsr, [[0, 61.25, 10, 0], [0, 0, 12, SET_RIR, 1]]);
   const cardio = loadWorkouts([{ ...p, exerciseData: [{ ...ex, exerciseTypes: "DD", setsData: [{ ...ex.setsData[1], inputOne: 0, inputTwo: 600 }] }] }])["2026-05-30"];
   assert.equal(cardio.wsets, 0);
   assert.equal("wsr" in cardio, false);

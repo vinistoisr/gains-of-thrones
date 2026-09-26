@@ -1,6 +1,6 @@
 // Deployment settings, per-person credentials and the Web Push key pair, all in
 // the R2 bucket so a fresh deploy needs nothing beyond the password:
-//   config/settings.json  {tz, people: [{id, name, workouts}], contact, origin}
+//   config/settings.json  {tz, people: [{id, name, workouts, units}], contact, origin}
 //   config/secrets.json   {uid: {ultrahuman, liftoff, hevy}}   never sent to the browser
 //   config/vapid.json     {publicKey, privateJwk}              generated on first use
 //
@@ -12,6 +12,11 @@
 // over the generated pair so existing push subscriptions stay valid.
 
 export const WORKOUT_SOURCES = ["liftoff", "hevy"];
+export const UNITS = ["kg", "lb"];
+// Hevy stores kilograms; Liftoff shows loads in the unit its user picked, and the
+// posts carry no account-level unit, so a Liftoff person defaults to lb (the
+// original setup) and anyone can switch on the settings page.
+export const defaultUnits = (workouts) => (workouts === "hevy" ? "kg" : "lb");
 const SECRET_ENV = { ultrahuman: "ULTRAHUMAN_TOKEN", liftoff: "LIFTOFF_REFRESH_TOKEN", hevy: "HEVY_API_KEY" };
 const SETTINGS_KEY = "config/settings.json";
 const SECRETS_KEY = "config/secrets.json";
@@ -24,13 +29,14 @@ async function getJSON(env, key) {
 }
 const putJSON = (env, key, obj) => env.BUCKET.put(key, JSON.stringify(obj), { httpMetadata: { contentType: "application/json" } });
 
-/** One person as stored; accepts the older {liftoff: true} flag. */
+/** One person as stored; accepts the older {liftoff: true} flag. units: "kg" | "lb", how loads are shown. */
 export function normPerson(p) {
   if (!p || typeof p !== "object") return null;
   const id = String(p.id || "").toLowerCase();
   if (!/^[a-z0-9_-]{1,32}$/.test(id)) return null;
   const workouts = WORKOUT_SOURCES.includes(p.workouts) ? p.workouts : p.liftoff ? "liftoff" : null;
-  return { id, name: String(p.name || id).slice(0, 40), workouts };
+  const units = UNITS.includes(p.units) ? p.units : defaultUnits(workouts);
+  return { id, name: String(p.name || id).slice(0, 40), workouts, units };
 }
 
 /** A new id from a display name, unique among `taken`. */

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fixture from "./fixture.json";
-import { hevyToPosts, hevySync, liftoffSignIn } from "../src/pipeline/sources.js";
+import { hevyToPosts, hevySync, liftoffSignIn, postsInUnit } from "../src/pipeline/sources.js";
 import { loadWorkouts, SET_FAILURE, SET_WARMUP, SET_DROP, SET_RIR } from "../src/pipeline/summarize.js";
 import { loadSettings, credential, vapidKeys, slugFor, normPerson } from "../src/config.js";
 import { settingsApi } from "../src/settings.js";
@@ -31,23 +31,48 @@ const HEVY_WORKOUT = {
   ],
 };
 
-test("hevyToPosts: kg becomes lb, set types and RPE carry over, timed sets are cardio", () => {
+test("hevyToPosts: loads stay in kg and say so, set types and RPE carry over, timed sets are cardio", () => {
   const [post] = hevyToPosts({ w1: HEVY_WORKOUT });
+  assert.equal(post.loadUnit, "kg");
   assert.equal(post.startedAt, "2026-06-30T17:00:00Z");
   assert.equal(post.sessionDuration, "3930");
   const [bench, push, run] = post.exerciseData;
   assert.equal(bench.exerciseTypes, "WR");
   assert.deepEqual(bench.setsData.map((s) => [s.inputOne, s.inputTwo, s.setType]),
-    [[88.2, 10, "warmup"], [176.4, 8, "normal"], [176.4, 6, "failure"], [132.3, 8, "drop"]]);
+    [[40, 10, "warmup"], [80, 8, "normal"], [80, 6, "failure"], [60, 8, "drop"]]);
   assert.equal(bench.setsData[1].rir, 2, "RPE 8 is 2 reps in reserve");
   assert.equal(push.setsData[0].inputOne, 0, "bodyweight set has no load");
   assert.equal(run.exerciseTypes, "DD");
   assert.deepEqual([run.setsData[0].inputOne, run.setsData[0].inputTwo], [2000, 720]);
 });
 
+test("postsInUnit: Hevy kg stays kg for a kg person and becomes lb for an lb person", () => {
+  const posts = hevyToPosts({ w1: HEVY_WORKOUT });
+  assert.equal(postsInUnit(posts, "kg")[0], posts[0], "nothing to convert, same object");
+  const lb = postsInUnit(posts, "lb")[0].exerciseData[0].setsData.map((s) => s.inputOne);
+  assert.deepEqual(lb, [88.2, 176.4, 176.4, 132.3]);
+  const cardio = postsInUnit(posts, "lb")[0].exerciseData[2].setsData[0];
+  assert.deepEqual([cardio.inputOne, cardio.inputTwo], [2000, 720], "distance and time are not loads");
+});
+
+test("postsInUnit: Liftoff is as logged in the person's unit, except an exercise with an overrideWeightUnit", () => {
+  const post = { startedAt: "2026-06-30T17:00:00Z", bodyweight: "80", exerciseData: [
+    { exerciseName: "Squat", exerciseTypes: "WR", overrideWeightUnit: null, setsData: [{ inputOne: 100, inputTwo: 5 }] },
+    { exerciseName: "Curl", exerciseTypes: "WR", overrideWeightUnit: "lbs", setsData: [{ inputOne: 45, inputTwo: 10 }] },
+  ] };
+  const [kg] = postsInUnit([post], "kg");
+  assert.equal(kg.exerciseData[0].setsData[0].inputOne, 100, "as logged");
+  assert.equal(kg.exerciseData[1].setsData[0].inputOne, 20.4, "45 lb override becomes kg");
+  assert.equal(kg.bodyweight, "80");
+  const [lb] = postsInUnit([post], "lb");
+  assert.equal(lb.exerciseData[1].setsData[0].inputOne, 45, "already lb");
+  assert.equal(lb.exerciseData[0].setsData[0].inputOne, 100, "no override: taken as the person's unit");
+});
+
 test("hevyToPosts -> loadWorkouts: the day has sets, volume, flags, cardio and muscle credit", () => {
-  const days = loadWorkouts(hevyToPosts({ w1: HEVY_WORKOUT }));
+  const days = loadWorkouts(postsInUnit(hevyToPosts({ w1: HEVY_WORKOUT }), "kg"));
   const d = days["2026-06-30"];
+  assert.equal(d.wvol, 40 * 10 + 80 * 8 + 80 * 6 + 60 * 8, "volume in kg");
   assert.ok(d, "Pacific date of a 17:00 UTC start");
   assert.equal(d.wsets, 5);
   assert.equal(d.wdur, 66);
@@ -110,7 +135,7 @@ test("config: the USERS var stands in until settings.json exists, and the older 
   const s = await loadSettings(env);
   assert.equal(s.source, "env");
   assert.equal(s.tz, "America/Vancouver");
-  assert.deepEqual(s.people, [{ id: "alex", name: "Alex", workouts: "liftoff" }]);
+  assert.deepEqual(s.people, [{ id: "alex", name: "Alex", workouts: "liftoff", units: "lb" }]);
   const stored = { BUCKET: bucket({ "config/settings.json": JSON.stringify({ tz: "Europe/Berlin", people: [{ id: "a", name: "A", workouts: "hevy" }] }) }), USERS: env.USERS };
   assert.equal((await loadSettings(stored)).people[0].id, "a");
 });
@@ -154,7 +179,7 @@ test("settings API: adding a Hevy person checks both tokens, never echoes them, 
   const res = await withFetch(f, () => settingsApi(req("POST", "/api/people", { name: "Sam", workouts: "hevy", ultrahuman: "uh-tok", hevy: "hv-key" }), env, new URL("https://h.example/api/people")));
   const out = await res.json();
   assert.equal(res.status, 200, out.error);
-  assert.deepEqual(out.people, [{ id: "sam", name: "Sam", workouts: "hevy", has: { ultrahuman: true, liftoff: false, hevy: true } }]);
+  assert.deepEqual(out.people, [{ id: "sam", name: "Sam", workouts: "hevy", units: "kg", has: { ultrahuman: true, liftoff: false, hevy: true } }]);
   assert.ok(!JSON.stringify(out).includes("uh-tok") && !JSON.stringify(out).includes("hv-key"), "no credential in the response");
   assert.deepEqual(JSON.parse(objects["config/secrets.json"]), { sam: { ultrahuman: "uh-tok", hevy: "hv-key" } });
 
